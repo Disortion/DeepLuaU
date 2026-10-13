@@ -83,6 +83,18 @@ local protected = Obfuscator.obfuscate(sourceString, {
 })
 ```
 
+### Web (runs in the browser, no backend)
+
+`web/deepluau.js` is a JavaScript port of the obfuscator that runs fully
+client-side — nothing is uploaded. `web/index.html` is a self-contained page that
+embeds it (rebuild with `python3 web/build_site.py`). The port is validated by
+running its output through the real `luau` interpreter (`node tests/validate_js.mjs`).
+
+```js
+const DeepLuaU = require("./web/deepluau.js");
+const out = DeepLuaU.obfuscate(source, { profile: "balanced", seed: 1337 });
+```
+
 ### CLI (via [Lune](https://lune-rs.github.io))
 
 ```sh

@@ -1,0 +1,1348 @@
+<title>DeepLuaU</title>
+<meta name="description" content="Client-side Luau obfuscator that protects source without costing runtime performance.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+/* Layout: a terminal "workbench" — sticky bar, compact hero, two-pane obfuscator,
+   then explanatory sections. Dark-first; cyan primary with an amber signal accent. */
+:root{
+  --bg:#0b0f17; --panel:#111726; --panel-2:#0e1420; --edge:#1e293b; --edge-soft:#172033;
+  --fg:#dbe4f0; --muted:#8597b0; --faint:#5e6f88;
+  --accent:#34e0cf; --accent-ink:#052b28; --amber:#f6b352; --rose:#ff6b7a; --green:#54d98a;
+  --shadow:0 18px 50px -24px rgba(0,0,0,.8);
+  --display:"Chakra Petch",ui-sans-serif,system-ui,sans-serif;
+  --body:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:light){ :root:not([data-theme="dark"]){
+  --bg:#eef1f6; --panel:#ffffff; --panel-2:#f4f6fb; --edge:#d7deea; --edge-soft:#e5eaf3;
+  --fg:#17202e; --muted:#53627a; --faint:#8493a9;
+  --accent:#0d9488; --accent-ink:#eafffb; --amber:#b4701a; --rose:#d33a4b; --green:#1c9d57;
+  --shadow:0 18px 44px -26px rgba(20,35,60,.35);
+  color-scheme:light;
+}}
+:root[data-theme="light"]{
+  --bg:#eef1f6; --panel:#ffffff; --panel-2:#f4f6fb; --edge:#d7deea; --edge-soft:#e5eaf3;
+  --fg:#17202e; --muted:#53627a; --faint:#8493a9;
+  --accent:#0d9488; --accent-ink:#eafffb; --amber:#b4701a; --rose:#d33a4b; --green:#1c9d57;
+  --shadow:0 18px 44px -26px rgba(20,35,60,.35);
+  color-scheme:light;
+}
+:root[data-theme="dark"]{
+  --bg:#0b0f17; --panel:#111726; --panel-2:#0e1420; --edge:#1e293b; --edge-soft:#172033;
+  --fg:#dbe4f0; --muted:#8597b0; --faint:#5e6f88;
+  --accent:#34e0cf; --accent-ink:#052b28; --amber:#f6b352; --rose:#ff6b7a; --green:#54d98a;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);line-height:1.6;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden}
+.wrap{max-width:1120px;margin-inline:auto;padding-inline:20px}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+/* top bar */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;
+  background:color-mix(in srgb,var(--bg) 86%,transparent);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--edge)}
+.bar .wrap{display:flex;align-items:center;gap:14px;padding-block:12px}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:700;
+  letter-spacing:.3px;font-size:18px}
+.glyph{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;
+  background:linear-gradient(145deg,var(--accent),#1aa89a);color:var(--accent-ink);
+  font-family:var(--mono);font-weight:700;font-size:15px}
+.brand small{color:var(--faint);font-family:var(--mono);font-weight:500;font-size:11px;
+  letter-spacing:.5px;text-transform:uppercase}
+.bar .spacer{flex:1}
+.iconbtn{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:9px;
+  border:1px solid var(--edge);background:var(--panel);color:var(--fg);cursor:pointer;font-size:16px}
+.iconbtn:hover{border-color:var(--accent)}
+.ghlink{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--edge);
+  background:var(--panel);color:var(--fg);padding:8px 13px;border-radius:9px;font-size:13px;font-weight:500}
+.ghlink:hover{border-color:var(--accent);text-decoration:none}
+
+/* hero */
+.hero{padding-block:46px 30px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:2.5px;text-transform:uppercase;
+  color:var(--accent);margin:0 0 14px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(38px,7vw,66px);line-height:1.02;
+  margin:0;letter-spacing:-.5px;text-wrap:balance}
+h1 .u{color:var(--accent)}
+.lede{font-size:clamp(16px,2.4vw,20px);color:var(--muted);max-width:60ch;margin:18px 0 0}
+.badges{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}
+.badge{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;
+  color:var(--muted);border:1px solid var(--edge-soft);background:var(--panel-2);
+  padding:6px 11px;border-radius:99px}
+.badge b{color:var(--green);font-weight:700}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px color-mix(in srgb,var(--green) 25%,transparent)}
+
+/* workbench */
+.panel{background:var(--panel);border:1px solid var(--edge);border-radius:16px;box-shadow:var(--shadow)}
+.work{margin-top:12px;overflow:hidden}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;padding:14px 16px;
+  border-bottom:1px solid var(--edge);background:var(--panel-2)}
+.field{display:flex;flex-direction:column;gap:5px}
+.field > label{font-family:var(--mono);font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--faint)}
+.seg{display:inline-flex;background:var(--bg);border:1px solid var(--edge);border-radius:10px;padding:3px}
+.seg button{appearance:none;border:0;background:transparent;color:var(--muted);cursor:pointer;
+  font-family:var(--mono);font-size:12.5px;font-weight:500;padding:7px 12px;border-radius:7px}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:700}
+.ctrl{display:flex;align-items:center;gap:8px}
+input[type="number"]{width:104px;font-family:var(--mono);font-size:13px;background:var(--bg);
+  color:var(--fg);border:1px solid var(--edge);border-radius:9px;padding:8px 10px}
+select{font-family:var(--body);font-size:13px;background:var(--bg);color:var(--fg);
+  border:1px solid var(--edge);border-radius:9px;padding:8px 10px}
+input:focus,select:focus{border-color:var(--accent);outline:none}
+.toolbar .spacer{flex:1;min-width:0}
+.cost{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;align-items:center;gap:7px;white-space:nowrap}
+.cost b{color:var(--fg);font-weight:700}
+
+.panes{display:grid;grid-template-columns:1fr 1fr;min-height:420px}
+.pane{display:flex;flex-direction:column;min-width:0}
+.pane + .pane{border-left:1px solid var(--edge)}
+.pane-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--edge-soft)}
+.pane-head h2{font-family:var(--mono);font-size:12px;letter-spacing:1px;text-transform:uppercase;
+  color:var(--faint);margin:0;font-weight:700}
+.pane-head .spacer{flex:1}
+.mini{appearance:none;border:1px solid var(--edge);background:var(--bg);color:var(--muted);
+  cursor:pointer;font-family:var(--mono);font-size:11.5px;padding:5px 10px;border-radius:7px}
+.mini:hover{border-color:var(--accent);color:var(--fg)}
+textarea{flex:1;width:100%;resize:none;border:0;background:var(--panel);color:var(--fg);
+  font-family:var(--mono);font-size:13px;line-height:1.65;padding:14px;white-space:pre;overflow:auto;tab-size:4}
+textarea:focus{outline:none}
+#out{background:var(--panel-2)}
+#out.err{color:var(--rose)}
+.statbar{display:flex;flex-wrap:wrap;gap:10px 22px;padding:11px 16px;border-top:1px solid var(--edge);
+  background:var(--panel-2);font-family:var(--mono);font-size:12px;color:var(--muted)}
+.statbar .s b{color:var(--fg);font-weight:700}
+.statbar .s span{color:var(--faint)}
+.grow{color:var(--amber)!important}
+.shrink{color:var(--green)!important}
+
+/* sections */
+section.block{padding-block:52px 8px}
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin:0 0 10px}
+h3{font-family:var(--display);font-weight:600;font-size:clamp(24px,3.6vw,32px);margin:0;letter-spacing:-.3px;text-wrap:balance}
+.sub{color:var(--muted);max-width:66ch;margin:12px 0 0}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:26px}
+.card{background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:20px}
+.card h4{font-family:var(--display);font-weight:600;font-size:17px;margin:0 0 8px;display:flex;align-items:center;gap:9px}
+.card p{color:var(--muted);font-size:14px;margin:0}
+.tag{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+  color:var(--green);border:1px solid color-mix(in srgb,var(--green) 40%,transparent);
+  background:color-mix(in srgb,var(--green) 12%,transparent);padding:3px 7px;border-radius:6px}
+
+.proof{margin-top:22px;background:var(--panel-2);border:1px solid var(--edge);border-radius:14px;
+  padding:18px 20px;display:flex;flex-wrap:wrap;align-items:center;gap:14px}
+.proof code{font-family:var(--mono);font-size:13px;background:var(--bg);border:1px solid var(--edge);
+  padding:6px 10px;border-radius:8px;color:var(--fg);white-space:nowrap}
+.proof .arrow{color:var(--accent);font-family:var(--mono);font-weight:700}
+.proof p{margin:0;color:var(--muted);font-size:13.5px;min-width:0}
+
+.tablewrap{margin-top:24px;overflow-x:auto;border:1px solid var(--edge);border-radius:14px}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:14px}
+th,td{text-align:left;padding:13px 16px;border-bottom:1px solid var(--edge-soft);vertical-align:top}
+thead th{font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;
+  color:var(--faint);background:var(--panel-2)}
+tbody tr:last-child td{border-bottom:0}
+td code,th code{font-family:var(--mono);font-size:12.5px;background:var(--panel-2);padding:2px 6px;border-radius:5px}
+.pill{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.pill.none{color:var(--green);background:color-mix(in srgb,var(--green) 14%,transparent)}
+.pill.low{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.pill.some{color:var(--amber);background:color-mix(in srgb,var(--amber) 16%,transparent)}
+.eff b{color:var(--fg)}
+
+.note{margin-top:22px;border-left:3px solid var(--amber);background:var(--panel-2);
+  border-radius:0 12px 12px 0;padding:16px 18px;color:var(--muted);font-size:14px}
+.note b{color:var(--fg)}
+
+footer{margin-top:60px;border-top:1px solid var(--edge);padding-block:28px 40px;color:var(--faint);font-size:13px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+footer .mono{font-family:var(--mono)}
+
+@media (max-width:760px){
+  .panes{grid-template-columns:1fr}
+  .pane + .pane{border-left:0;border-top:1px solid var(--edge)}
+  .cards{grid-template-columns:1fr}
+  .toolbar .spacer{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<header class="bar">
+  <div class="wrap">
+    <div class="brand"><span class="glyph">Lu</span> DeepLuaU <small>obfuscator</small></div>
+    <span class="spacer"></span>
+    <a class="ghlink" href="https://github.com/Disortion/DeepLuaU" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38v-1.33c-2.23.49-2.7-1.08-2.7-1.08-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.71 1.22 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      Source
+    </a>
+    <button class="iconbtn" id="theme" title="Toggle theme" aria-label="Toggle theme">◐</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <p class="eyebrow">Luau source protection</p>
+    <h1>Obfuscate <span class="u">Luau</span> without<br>losing a single frame.</h1>
+    <p class="lede">An AST-based obfuscator that hides your source where it's free to hide — folding numbers at compile time, decrypting strings once at load, renaming locals — so the hot path runs exactly as fast as before.</p>
+    <div class="badges">
+      <span class="badge"><span class="dot"></span><b>100% in your browser</b></span>
+      <span class="badge">No account</span>
+      <span class="badge">No upload — code never leaves this tab</span>
+      <span class="badge">balanced ≈ <b>98%</b> of original runtime</span>
+    </div>
+  </section>
+
+  <section class="panel work" aria-label="Obfuscator">
+    <div class="toolbar">
+      <div class="field">
+        <label>Profile</label>
+        <div class="seg" id="profile" role="group" aria-label="Profile">
+          <button data-p="none">none</button>
+          <button data-p="light">light</button>
+          <button data-p="balanced" aria-pressed="true">balanced</button>
+          <button data-p="max">max</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="seed">Seed</label>
+        <div class="ctrl">
+          <input type="number" id="seed" value="1337" min="0" step="1">
+          <button class="mini" id="dice" title="Random seed">⟳ random</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="example">Example</label>
+        <select id="example">
+          <option value="vector">Vector math (OOP)</option>
+          <option value="roblox">Roblox script</option>
+          <option value="loop">Hot loop + strings</option>
+        </select>
+      </div>
+      <span class="spacer"></span>
+      <div class="field">
+        <label>Runtime cost</label>
+        <div class="cost"><span class="dot" id="costdot"></span><b id="cost">near-zero</b></div>
+      </div>
+    </div>
+    <div class="panes">
+      <div class="pane">
+        <div class="pane-head"><h2>Input · Luau</h2><span class="spacer"></span>
+          <button class="mini" id="clear">clear</button></div>
+        <textarea id="in" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Luau source input"></textarea>
+      </div>
+      <div class="pane">
+        <div class="pane-head"><h2>Output · protected</h2><span class="spacer"></span>
+          <button class="mini" id="copy">copy</button></div>
+        <textarea id="out" readonly spellcheck="false" aria-label="Obfuscated output"></textarea>
+      </div>
+    </div>
+    <div class="statbar">
+      <div class="s"><span>in</span> <b id="st-in">0</b> B</div>
+      <div class="s"><span>out</span> <b id="st-out">0</b> B</div>
+      <div class="s"><span>size</span> <b id="st-ratio">—</b></div>
+      <div class="s"><span>strings pooled</span> <b id="st-str">0</b></div>
+      <div class="s"><span>time</span> <b id="st-time">0</b> ms</div>
+    </div>
+  </section>
+
+  <section class="block">
+    <p class="kicker">Why it's fast</p>
+    <h3>Obfuscate where it costs nothing</h3>
+    <p class="sub">The one technique that's genuinely hard to reverse — a custom bytecode VM — is also the one that runs 10–100× slower. That's the wrong trade for code in a render loop. DeepLuaU pushes the work into forms the Luau compiler erases or that run only once.</p>
+    <div class="cards">
+      <div class="card">
+        <h4>Numbers <span class="tag">free</span></h4>
+        <p>Every integer becomes arithmetic like <code style="font-family:var(--mono)">((0xD-9)+(0xB-5))</code>. Luau constant-folds it at compile time, so the bytecode is identical to the plain literal.</p>
+      </div>
+      <div class="card">
+        <h4>Strings <span class="tag">load once</span></h4>
+        <p>All strings are encrypted into one pool and decrypted a single time at load. Each use becomes one table index — no per-call, no per-frame decryption.</p>
+      </div>
+      <div class="card">
+        <h4>Names <span class="tag">free</span></h4>
+        <p>Locals are renamed to lookalike <code style="font-family:var(--mono)">I l i j _</code> soup. It's purely lexical: the compiled bytecode is unchanged apart from debug names.</p>
+      </div>
+    </div>
+    <div class="proof">
+      <code>((0xD-9)+(0xB-5))</code>
+      <span class="arrow">compiles to →</span>
+      <code>LOADN R1 10</code>
+      <p>The same instruction a bare <code style="font-family:var(--mono)">10</code> produces. Verified with <code style="font-family:var(--mono)">luau-compile -O2</code>. The real constant never appears in the shipped source.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <p class="kicker">Profiles</p>
+    <h3>Pick by where the code runs</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Profile</th><th>Passes</th><th>Runtime cost</th><th>Use for</th></tr></thead>
+        <tbody>
+          <tr><td><code>none</code></td><td>minify</td><td><span class="pill none">none</span></td><td>baseline / debugging</td></tr>
+          <tr><td><code>light</code></td><td>+ rename locals</td><td><span class="pill none">none</span></td><td>anything, including hot loops</td></tr>
+          <tr><td><code>balanced</code></td><td>+ string encryption + number folding</td><td><span class="pill low">near-zero</span></td><td class="eff"><b>default</b> — game clients, render-loop code</td></tr>
+          <tr><td><code>max</code></td><td>+ control-flow flattening</td><td><span class="pill some">small per-call</span></td><td>cold / non-hot modules</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="block">
+    <p class="kicker">Straight talk</p>
+    <h3>What it stops — and what it doesn't</h3>
+    <p class="sub">No obfuscator is unbreakable: code that runs on a machine you don't control can be observed. DeepLuaU raises the cost of reading your source. Here's exactly how each layer comes apart, so you know what you're buying.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Layer</th><th>How it's undone</th><th>Effort</th><th>What they need</th></tr></thead>
+        <tbody>
+          <tr><td>Minification</td><td>Run any beautifier / AST round-trip</td><td><span class="pill none">seconds</span></td><td>A formatter</td></tr>
+          <tr><td>Number folding</td><td>It's constant arithmetic — fold it; <code>luau-compile</code> already does</td><td><span class="pill none">seconds</span></td><td>The Luau compiler</td></tr>
+          <tr><td>Local renaming</td><td>Original names are gone for good; a scope pass assigns fresh readable ones</td><td><span class="pill low">minutes</span></td><td>A Luau parser + scope analysis</td></tr>
+          <tr><td>String encryption</td><td>Run it and dump the pool, or extract the embedded decoder and re-run it</td><td><span class="pill low">minutes</span></td><td>To run it, or read the decoder</td></tr>
+          <tr><td>Control-flow flattening</td><td>Trace the state transitions, or a static deflattener rebuilds the order</td><td><span class="pill some">moderate</span></td><td>A tracer / symbolic execution</td></tr>
+          <tr><td>All source layers</td><td>Dump compiled bytecode and decompile — sidesteps source entirely</td><td><span class="pill some">moderate</span></td><td>A Luau bytecode decompiler</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note"><b>Gone for good, for everyone:</b> original variable names, comments and type annotations are deleted, not hidden — even a full deobfuscation yields equivalent code, never your original source. <b>The rule that still matters most:</b> never ship secrets or server-trusted logic in client code, obfuscated or not. Keep authority on the server.</p>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Runs entirely client-side · your code is never uploaded.</span>
+    <span class="mono"><a href="https://github.com/Disortion/DeepLuaU" target="_blank" rel="noopener">github.com/Disortion/DeepLuaU</a></span>
+  </div>
+</footer>
+
+<script>
+/*
+ * DeepLuaU — browser/JS port of the Luau obfuscator.
+ * Faithful translation of src/*.lua. Runs fully client-side (no backend).
+ * Exposes: DeepLuaU.obfuscate(source, { profile, seed, header }) -> string
+ * Validated by running its output through the real `luau` interpreter.
+ */
+(function (root) {
+  "use strict";
+
+  // ---------------------------------------------------------------- RNG
+  function Rng(seed) {
+    seed = (seed >>> 0) || 0x9e3779b9;
+    this.s = seed >>> 0;
+  }
+  Rng.prototype.next = function () {
+    let s = this.s;
+    s ^= (s << 13) >>> 0; s >>>= 0;
+    s ^= s >>> 17; s >>>= 0;
+    s ^= (s << 5) >>> 0; s >>>= 0;
+    this.s = s >>> 0;
+    return this.s;
+  };
+  Rng.prototype.float = function () { return this.next() / 4294967296; };
+  Rng.prototype.int = function (lo, hi) {
+    if (hi < lo) return lo;
+    const span = hi - lo + 1;
+    return lo + (this.next() % span);
+  };
+  Rng.prototype.chance = function (p) { return this.float() < p; };
+  Rng.prototype.shuffle = function (list) {
+    for (let i = list.length - 1; i >= 1; i--) {
+      const j = this.int(0, i);
+      const t = list[i]; list[i] = list[j]; list[j] = t;
+    }
+    return list;
+  };
+
+  // ---------------------------------------------------------------- Lexer
+  const KEYWORDS = new Set(["and","break","do","else","elseif","end","false","for",
+    "function","if","in","local","nil","not","or","repeat","return","then","true",
+    "until","while"]);
+  const isDigit = c => c >= "0" && c <= "9";
+  const isHex = c => (c>="0"&&c<="9")||(c>="a"&&c<="f")||(c>="A"&&c<="F");
+  const isAlpha = c => (c>="a"&&c<="z")||(c>="A"&&c<="Z")||c==="_";
+  const isAlphaNum = c => isAlpha(c)||isDigit(c);
+
+  const SYMBOLS = ["...","..=","//=","::","->","==","~=","<=",">=","..","+=","-=",
+    "*=","/=","%=","^=","//","+","-","*","/","%","^","#","<",">","=","(",")","{","}",
+    "[","]",";",":",",",".","?","&","|"];
+
+  function Lexer(src) { this.src=src; this.pos=0; this.line=1; this.len=src.length; this.tokens=[]; }
+  Lexer.prototype.error = function (m){ throw new Error("DeepLuaU lex error (line "+this.line+"): "+m); };
+  Lexer.prototype.peek = function (o){ const i=this.pos+(o||0); return i>=this.len?"":this.src[i]; };
+  Lexer.prototype.advance = function (){ const c=this.src[this.pos++]; if(c==="\n")this.line++; return c; };
+  Lexer.prototype.match = function (s){
+    if (this.src.substr(this.pos, s.length)===s){ for(let i=0;i<s.length;i++)this.advance(); return true; }
+    return false;
+  };
+  Lexer.prototype.tryLongBracket = function (){
+    const start=this.pos;
+    if (this.peek()!=="[") return null;
+    let p=this.pos+1, level=0;
+    while (this.src[p]==="=") { level++; p++; }
+    if (this.src[p]!=="[") return null;
+    this.pos=p+1;
+    if (this.peek()==="\r") this.advance();
+    if (this.peek()==="\n") this.advance();
+    const close="]"+"=".repeat(level)+"]";
+    const idx=this.src.indexOf(close, this.pos);
+    if (idx<0){ this.pos=start; this.error("unterminated long bracket"); }
+    const content=this.src.substring(this.pos, idx);
+    for (let i=this.pos;i<idx+close.length;i++) this.advance();
+    return { content, level };
+  };
+  Lexer.prototype.readShortString = function (quote){
+    const buf=[]; this.advance();
+    while (true){
+      const c=this.peek();
+      if (c===""||c==="\n") this.error("unterminated string");
+      if (c===quote){ this.advance(); break; }
+      if (c==="\\"){ this.advance(); const e=this.advance(); buf.push("\\"+e); }
+      else buf.push(this.advance());
+    }
+    return buf.join("");
+  };
+  Lexer.prototype.readInterpString = function (){
+    const buf=[]; this.advance(); let depth=0;
+    while (true){
+      const c=this.peek();
+      if (c==="") this.error("unterminated interpolated string");
+      if (c==="\\"){ buf.push(this.advance()); buf.push(this.advance()); }
+      else if (c==="{"){ depth++; buf.push(this.advance()); }
+      else if (c==="}"){ if(depth>0)depth--; buf.push(this.advance()); }
+      else if (c==="`"&&depth===0){ this.advance(); break; }
+      else buf.push(this.advance());
+    }
+    return buf.join("");
+  };
+  Lexer.prototype.readNumber = function (){
+    const start=this.pos;
+    if (this.peek()==="0"&&(this.peek(1)==="x"||this.peek(1)==="X")){
+      this.advance(); this.advance();
+      while (isHex(this.peek())||this.peek()==="_") this.advance();
+      if (this.peek()==="."){ this.advance(); while(isHex(this.peek())||this.peek()==="_")this.advance(); }
+      if (this.peek()==="p"||this.peek()==="P"){ this.advance(); if(this.peek()==="+"||this.peek()==="-")this.advance(); while(isDigit(this.peek())||this.peek()==="_")this.advance(); }
+    } else if (this.peek()==="0"&&(this.peek(1)==="b"||this.peek(1)==="B")){
+      this.advance(); this.advance();
+      while (this.peek()==="0"||this.peek()==="1"||this.peek()==="_") this.advance();
+    } else {
+      while (isDigit(this.peek())||this.peek()==="_") this.advance();
+      if (this.peek()==="."){ this.advance(); while(isDigit(this.peek())||this.peek()==="_")this.advance(); }
+      if (this.peek()==="e"||this.peek()==="E"){ this.advance(); if(this.peek()==="+"||this.peek()==="-")this.advance(); while(isDigit(this.peek())||this.peek()==="_")this.advance(); }
+    }
+    return this.src.substring(start, this.pos);
+  };
+  Lexer.prototype.add = function (type, value){ this.tokens.push({ type, value, line:this.line }); };
+  Lexer.prototype.tokenize = function (){
+    while (this.pos<this.len){
+      const c=this.peek();
+      if (c===" "||c==="\t"||c==="\r"||c==="\n"){ this.advance(); }
+      else if (c==="-"&&this.peek(1)==="-"){
+        this.advance(); this.advance();
+        if (this.peek()==="["){ const lb=this.tryLongBracket(); if(lb===null){ while(this.peek()!=="\n"&&this.peek()!=="")this.advance(); } }
+        else { while(this.peek()!=="\n"&&this.peek()!=="")this.advance(); }
+      }
+      else if (c==="["&&(this.peek(1)==="["||this.peek(1)==="=")){
+        const lb=this.tryLongBracket();
+        if (lb!==null) this.add("String",{kind:"long",value:lb.content,level:lb.level});
+        else { this.advance(); this.add("Symbol","["); }
+      }
+      else if (c==='"'||c==="'"){ const v=this.readShortString(c); this.add("String",{kind:"short",value:v,quote:c}); }
+      else if (c==="`"){ const v=this.readInterpString(); this.add("String",{kind:"interp",value:v}); }
+      else if (c==="@"){ this.advance(); const s=this.pos; while(isAlphaNum(this.peek()))this.advance(); this.add("Attribute",this.src.substring(s,this.pos)); }
+      else if (isDigit(c)||(c==="."&&isDigit(this.peek(1)))){ this.add("Number",this.readNumber()); }
+      else if (isAlpha(c)){
+        const s=this.pos; while(isAlphaNum(this.peek()))this.advance();
+        const w=this.src.substring(s,this.pos);
+        this.add(KEYWORDS.has(w)?"Keyword":"Name", w);
+      }
+      else {
+        let matched=false;
+        for (const sym of SYMBOLS){ if(this.match(sym)){ this.add("Symbol",sym); matched=true; break; } }
+        if (!matched) this.error("unexpected character '"+c+"'");
+      }
+    }
+    this.add("EOF", null);
+    return this.tokens;
+  };
+
+  // ---------------------------------------------------------------- Parser
+  const BINPRI = {
+    "or":[1,1],"and":[2,2],
+    "<":[3,3],">":[3,3],"<=":[3,3],">=":[3,3],"~=":[3,3],"==":[3,3],
+    "..":[9,8],"+":[10,10],"-":[10,10],
+    "*":[11,11],"/":[11,11],"//":[11,11],"%":[11,11],"^":[14,13],
+  };
+  const UNARY_PRI = 12;
+  const COMPOUND = {"+=":"+","-=":"-","*=":"*","/=":"/","//=":"//","%=":"%","^=":"^","..=":".."};
+  const CLOSE_OF = {"(":")","{":"}","[":"]"};
+
+  function Parser(src){ this.tokens=new Lexer(src).tokenize(); this.pos=0; }
+  Parser.prototype.error = function (m){
+    const t=this.tokens[this.pos];
+    throw new Error("DeepLuaU parse error (line "+(t&&t.line)+"): "+m+" (got "+(t&&t.type)+" "+(t&&(typeof t.value==="object"?"<str>":t.value))+")");
+  };
+  Parser.prototype.peek = function (o){ return this.tokens[this.pos+(o||0)]; };
+  Parser.prototype.nextTok = function (){ return this.tokens[this.pos++]; };
+  Parser.prototype.check = function (type,value){
+    const t=this.tokens[this.pos];
+    if (!t||t.type!==type) return false;
+    if (value!==undefined && value!==null && t.value!==value) return false;
+    return true;
+  };
+  Parser.prototype.accept = function (type,value){ return this.check(type,value)?this.nextTok():null; };
+  Parser.prototype.expect = function (type,value){ const t=this.accept(type,value); if(!t)this.error("expected "+type+(value?(" '"+value+"'"):"")); return t; };
+  Parser.prototype.isKw = function (w){ return this.check("Keyword",w); };
+  Parser.prototype.isSym = function (s){ return this.check("Symbol",s); };
+
+  Parser.prototype.skipGenericParams = function (){
+    if (!this.isSym("<")) return;
+    this.nextTok(); let depth=1;
+    while (depth>0){ const t=this.nextTok(); if(!t||t.type==="EOF")this.error("unterminated generic params");
+      if(t.type==="Symbol"&&t.value==="<")depth++; else if(t.type==="Symbol"&&t.value===">")depth--; }
+  };
+  Parser.prototype.skipTypeArgs = function (){
+    this.nextTok(); let depth=1;
+    while (depth>0){ const t=this.nextTok(); if(!t||t.type==="EOF")this.error("unterminated type args");
+      if(t.type==="Symbol"&&t.value==="<")depth++; else if(t.type==="Symbol"&&t.value===">")depth--; }
+  };
+  Parser.prototype.skipBalanced = function (open){
+    const close=CLOSE_OF[open]; this.nextTok(); let depth=1;
+    while (depth>0){ const t=this.nextTok(); if(!t||t.type==="EOF")this.error("unterminated "+open);
+      if(t.type==="Symbol"){ if(t.value===open)depth++; else if(t.value===close)depth--; } }
+  };
+  Parser.prototype.skipSimpleType = function (){
+    if (this.isSym("(")) this.skipBalanced("(");
+    else if (this.isSym("{")) this.skipBalanced("{");
+    else if (this.isSym("...")){ this.nextTok(); this.skipSimpleType(); }
+    else if (this.check("String")||this.check("Number")) this.nextTok();
+    else if (this.check("Name")||this.isKw("nil")||this.isKw("true")||this.isKw("false")||this.check("Keyword","function")){
+      this.nextTok();
+      while (this.isSym(".")){ this.nextTok(); this.expect("Name"); }
+      if (this.isSym("<")) this.skipTypeArgs();
+    } else this.error("expected a type");
+    while (this.isSym("?")) this.nextTok();
+  };
+  Parser.prototype.skipType = function (){
+    this.skipSimpleType();
+    while (true){
+      if (this.isSym("|")||this.isSym("&")){ this.nextTok(); this.skipSimpleType(); }
+      else if (this.isSym("->")){ this.nextTok(); this.skipSimpleType(); }
+      else break;
+    }
+  };
+
+  Parser.prototype.parse = function (){
+    const block=this.parseBlock();
+    if (!this.check("EOF")) this.error("unexpected trailing token");
+    return block;
+  };
+  const BLOCK_END = new Set(["end","else","elseif","until"]);
+  Parser.prototype.atBlockEnd = function (){
+    if (this.check("EOF")) return true;
+    const t=this.tokens[this.pos];
+    return t.type==="Keyword"&&BLOCK_END.has(t.value);
+  };
+  Parser.prototype.parseBlock = function (){
+    const stats=[];
+    while (!this.atBlockEnd()){
+      if (this.isKw("return")){ stats.push(this.parseReturn()); break; }
+      const s=this.parseStatement();
+      if (s) stats.push(s);
+    }
+    return { kind:"Block", stats };
+  };
+  Parser.prototype.parseReturn = function (){
+    this.nextTok();
+    let exprs=[];
+    if (!this.atBlockEnd() && !this.isSym(";")) exprs=this.parseExprList();
+    this.accept("Symbol",";");
+    return { kind:"Return", exprs };
+  };
+  Parser.prototype.parseStatement = function (){
+    if (this.isSym(";")){ this.nextTok(); return null; }
+    let attribs=null;
+    while (this.check("Attribute")){ attribs=attribs||[]; attribs.push(this.nextTok().value); }
+    if (this.isKw("local")) return this.parseLocal(attribs);
+    if (this.isKw("if")) return this.parseIf();
+    if (this.isKw("while")) return this.parseWhile();
+    if (this.isKw("for")) return this.parseFor();
+    if (this.isKw("repeat")) return this.parseRepeat();
+    if (this.isKw("do")){ this.nextTok(); const body=this.parseBlock(); this.expect("Keyword","end"); return {kind:"Do",body}; }
+    if (this.isKw("function")) return this.parseFunctionStat(attribs);
+    if (this.isKw("break")){ this.nextTok(); return {kind:"Break"}; }
+    if (this.isKw("return")) return this.parseReturn();
+    if (this.check("Name","continue") && !this.isFollowedByCall()){ this.nextTok(); return {kind:"Continue"}; }
+    if (this.check("Name","type") && this.peek(1) && this.peek(1).type==="Name") return this.parseTypeAlias(false);
+    if (this.check("Name","export") && this.peek(1) && this.peek(1).type==="Name" && this.peek(1).value==="type"){ this.nextTok(); return this.parseTypeAlias(true); }
+    return this.parseExprStatement();
+  };
+  Parser.prototype.isFollowedByCall = function (){
+    const n=this.peek(1); if(!n) return false;
+    if (n.type==="Symbol"){ const v=n.value;
+      return v==="("||v==="."||v===":"||v==="["||v==="="||v===","||v==="{"||COMPOUND[v]!==undefined; }
+    return n.type==="String";
+  };
+  Parser.prototype.parseTypeAlias = function (){
+    this.nextTok(); this.expect("Name"); this.skipGenericParams();
+    this.expect("Symbol","="); this.skipType();
+    return { kind:"TypeAlias" };
+  };
+  Parser.prototype.parseLocal = function (attribs){
+    this.nextTok();
+    if (this.isKw("function")){
+      this.nextTok(); const name=this.expect("Name").value; const body=this.parseFunctionBody();
+      return { kind:"LocalFunction", name, body, attribs };
+    }
+    const names=[];
+    do {
+      const n=this.expect("Name").value;
+      if (this.isSym("<")) this.skipTypeArgs();
+      if (this.accept("Symbol",":")) this.skipType();
+      names.push({ name:n, attrib:null });
+    } while (this.accept("Symbol",","));
+    let exprs=[];
+    if (this.accept("Symbol","=")) exprs=this.parseExprList();
+    return { kind:"LocalAssign", names, exprs };
+  };
+  Parser.prototype.parseIf = function (){
+    this.nextTok(); const clauses=[];
+    let cond=this.parseExpr(); this.expect("Keyword","then");
+    clauses.push({ cond, body:this.parseBlock() });
+    while (this.isKw("elseif")){ this.nextTok(); const c=this.parseExpr(); this.expect("Keyword","then"); clauses.push({cond:c,body:this.parseBlock()}); }
+    let elseBody=null;
+    if (this.accept("Keyword","else")) elseBody=this.parseBlock();
+    this.expect("Keyword","end");
+    return { kind:"If", clauses, elseBody };
+  };
+  Parser.prototype.parseWhile = function (){
+    this.nextTok(); const cond=this.parseExpr(); this.expect("Keyword","do");
+    const body=this.parseBlock(); this.expect("Keyword","end");
+    return { kind:"While", cond, body };
+  };
+  Parser.prototype.parseRepeat = function (){
+    this.nextTok(); const body=this.parseBlock(); this.expect("Keyword","until");
+    const cond=this.parseExpr();
+    return { kind:"Repeat", body, cond };
+  };
+  Parser.prototype.parseFor = function (){
+    this.nextTok(); const first=this.expect("Name").value;
+    if (this.accept("Symbol",":")) this.skipType();
+    if (this.isSym("=")){
+      this.nextTok(); const startE=this.parseExpr(); this.expect("Symbol",",");
+      const stopE=this.parseExpr(); let stepE=null;
+      if (this.accept("Symbol",",")) stepE=this.parseExpr();
+      this.expect("Keyword","do"); const body=this.parseBlock(); this.expect("Keyword","end");
+      return { kind:"NumericFor", var:first, startE, stopE, stepE, body };
+    }
+    const names=[first];
+    while (this.accept("Symbol",",")){ names.push(this.expect("Name").value); if(this.accept("Symbol",":"))this.skipType(); }
+    this.expect("Keyword","in"); const exprs=this.parseExprList();
+    this.expect("Keyword","do"); const body=this.parseBlock(); this.expect("Keyword","end");
+    return { kind:"GenericFor", names, exprs, body };
+  };
+  Parser.prototype.parseFunctionStat = function (attribs){
+    this.nextTok();
+    let base={ kind:"Name", name:this.expect("Name").value };
+    let isMethod=false;
+    while (this.isSym(".")){ this.nextTok(); base={kind:"Field",obj:base,name:this.expect("Name").value}; }
+    if (this.accept("Symbol",":")){ base={kind:"Field",obj:base,name:this.expect("Name").value}; isMethod=true; }
+    const body=this.parseFunctionBody();
+    if (isMethod) body.params.unshift("self");
+    return { kind:"FunctionDecl", target:base, body, isMethod, attribs };
+  };
+  Parser.prototype.parseFunctionBody = function (){
+    this.skipGenericParams(); this.expect("Symbol","(");
+    const params=[]; let isVararg=false;
+    if (!this.isSym(")")){
+      do {
+        if (this.isSym("...")){ this.nextTok(); isVararg=true; if(this.accept("Symbol",":"))this.skipType(); break; }
+        const p=this.expect("Name").value;
+        if (this.accept("Symbol",":")) this.skipType();
+        params.push(p);
+      } while (this.accept("Symbol",","));
+    }
+    this.expect("Symbol",")");
+    if (this.accept("Symbol",":")) this.skipType();
+    const body=this.parseBlock(); this.expect("Keyword","end");
+    return { kind:"Function", params, isVararg, body };
+  };
+  Parser.prototype.parseExprStatement = function (){
+    const first=this.parseSuffixedExpr();
+    if (this.check("Symbol") && COMPOUND[this.tokens[this.pos].value]){
+      const op=COMPOUND[this.nextTok().value]; const rhs=this.parseExpr();
+      return { kind:"CompoundAssign", op, target:first, expr:rhs };
+    }
+    if (this.isSym("=")||this.isSym(",")){
+      const targets=[first];
+      while (this.accept("Symbol",",")) targets.push(this.parseSuffixedExpr());
+      this.expect("Symbol","="); const exprs=this.parseExprList();
+      return { kind:"Assign", targets, exprs };
+    }
+    if (first.kind==="Call"||first.kind==="MethodCall") return { kind:"ExprStat", expr:first };
+    this.error("syntax error: unexpected expression statement");
+  };
+  Parser.prototype.parseExprList = function (){
+    const list=[this.parseExpr()];
+    while (this.accept("Symbol",",")) list.push(this.parseExpr());
+    return list;
+  };
+  Parser.prototype.parseExpr = function (limit){
+    limit=limit||0; let left;
+    if (this.isKw("not")||this.isSym("-")||this.isSym("#")){
+      const op=this.nextTok().value; const operand=this.parseExpr(UNARY_PRI);
+      left={ kind:"Unop", op, operand };
+    } else if (this.isKw("if")) left=this.parseIfExpr();
+    else left=this.parseSimpleExpr();
+    while (this.isSym("::")){ this.nextTok(); this.skipType(); }
+    while (true){
+      const t=this.tokens[this.pos]; let opval;
+      if (t&&t.type==="Symbol"&&BINPRI[t.value]) opval=t.value;
+      else if (t&&t.type==="Keyword"&&(t.value==="and"||t.value==="or")) opval=t.value;
+      if (!opval) break;
+      const pri=BINPRI[opval];
+      if (pri[0]<=limit) break;
+      this.nextTok();
+      const right=this.parseExpr(pri[1]);
+      left={ kind:"Binop", op:opval, lhs:left, rhs:right };
+      while (this.isSym("::")){ this.nextTok(); this.skipType(); }
+    }
+    return left;
+  };
+  Parser.prototype.parseIfExpr = function (){
+    this.nextTok(); const clauses=[];
+    let cond=this.parseExpr(); this.expect("Keyword","then");
+    clauses.push({ cond, value:this.parseExpr() });
+    while (this.isKw("elseif")){ this.nextTok(); const c=this.parseExpr(); this.expect("Keyword","then"); clauses.push({cond:c,value:this.parseExpr()}); }
+    this.expect("Keyword","else"); const elseExpr=this.parseExpr();
+    return { kind:"IfExpr", clauses, elseExpr };
+  };
+  Parser.prototype.parseSimpleExpr = function (){
+    if (this.check("Number")) return { kind:"Number", raw:this.nextTok().value };
+    if (this.check("String")) return { kind:"String", str:this.nextTok().value };
+    if (this.isKw("nil")){ this.nextTok(); return {kind:"Nil"}; }
+    if (this.isKw("true")){ this.nextTok(); return {kind:"True"}; }
+    if (this.isKw("false")){ this.nextTok(); return {kind:"False"}; }
+    if (this.isSym("...")){ this.nextTok(); return {kind:"VarArg"}; }
+    if (this.isSym("{")) return this.parseTable();
+    if (this.isKw("function")){ this.nextTok(); return this.parseFunctionBody(); }
+    return this.parseSuffixedExpr();
+  };
+  Parser.prototype.parsePrimaryExpr = function (){
+    if (this.isSym("(")){ this.nextTok(); const e=this.parseExpr(); this.expect("Symbol",")"); return {kind:"Paren",expr:e}; }
+    if (this.check("Name")) return { kind:"Name", name:this.nextTok().value };
+    this.error("unexpected symbol, expected an expression");
+  };
+  Parser.prototype.parseSuffixedExpr = function (){
+    let e=this.parsePrimaryExpr();
+    while (true){
+      if (this.isSym(".")){ this.nextTok(); e={kind:"Field",obj:e,name:this.expect("Name").value}; }
+      else if (this.isSym("[")){ this.nextTok(); const idx=this.parseExpr(); this.expect("Symbol","]"); e={kind:"Index",obj:e,index:idx}; }
+      else if (this.isSym(":")){ this.nextTok(); const m=this.expect("Name").value; const args=this.parseCallArgs(); e={kind:"MethodCall",obj:e,method:m,args}; }
+      else if (this.isSym("(")||this.isSym("{")||this.check("String")){ const args=this.parseCallArgs(); e={kind:"Call",func:e,args}; }
+      else break;
+    }
+    return e;
+  };
+  Parser.prototype.parseCallArgs = function (){
+    if (this.check("String")) return [{ kind:"String", str:this.nextTok().value }];
+    if (this.isSym("{")) return [this.parseTable()];
+    this.expect("Symbol","(");
+    let args=[];
+    if (!this.isSym(")")) args=this.parseExprList();
+    this.expect("Symbol",")");
+    return args;
+  };
+  Parser.prototype.parseTable = function (){
+    this.expect("Symbol","{");
+    const fields=[];
+    while (!this.isSym("}")){
+      if (this.isSym("[")){
+        this.nextTok(); const key=this.parseExpr(); this.expect("Symbol","]"); this.expect("Symbol","=");
+        fields.push({ type:"rec", key, value:this.parseExpr() });
+      } else if (this.check("Name") && this.peek(1) && this.peek(1).type==="Symbol" && this.peek(1).value==="="){
+        const name=this.nextTok().value; this.nextTok();
+        fields.push({ type:"name", name, value:this.parseExpr() });
+      } else {
+        fields.push({ type:"list", value:this.parseExpr() });
+      }
+      if (!(this.accept("Symbol",",")||this.accept("Symbol",";"))) break;
+    }
+    this.expect("Symbol","}");
+    return { kind:"Table", fields };
+  };
+
+  // ---------------------------------------------------------------- Generator
+  const DANGER = new Set(["--","..","::","//","==","~=","<=",">=","->","+=","-=","*=","/=","%=","^=","..."]);
+  const isWordCh = c => c!=="" && /[\w]/.test(c);
+  function Generator(){ this.out=[]; this.last=""; this.lastType=""; }
+  Generator.prototype.emit = function (s, tokType){
+    if (s==="") return;
+    const first=s[0], lastC=this.last; let need=false;
+    if (isWordCh(lastC)&&isWordCh(first)) need=true;
+    else if (DANGER.has(lastC+first)) need=true;
+    else if (this.lastType==="Number"&&first===".") need=true;
+    if (need) this.out.push(" ");
+    this.out.push(s); this.last=s[s.length-1]; this.lastType=tokType||"";
+  };
+  Generator.prototype.result = function (){ return this.out.join(""); };
+  Generator.prototype.emitString = function (str){
+    if (str.kind==="short") this.emit(str.quote+str.value+str.quote,"String");
+    else if (str.kind==="long"){ const eq="=".repeat(str.level||0); this.emit("["+eq+"[\n"+str.value+"]"+eq+"]","String"); }
+    else this.emit("`"+str.value+"`","String");
+  };
+  const OP_NODE = new Set(["Binop","Unop","IfExpr"]);
+  Generator.prototype.emitWrapped = function (node){
+    if (OP_NODE.has(node.kind)){ this.emit("("); this.emitExpr(node); this.emit(")"); }
+    else this.emitExpr(node);
+  };
+  Generator.prototype.emitExpr = function (node){
+    const k=node.kind;
+    if (k==="Nil") this.emit("nil");
+    else if (k==="True") this.emit("true");
+    else if (k==="False") this.emit("false");
+    else if (k==="VarArg") this.emit("...");
+    else if (k==="Number") this.emit(node.raw,"Number");
+    else if (k==="String") this.emitString(node.str);
+    else if (k==="Name") this.emit(node.name,"Name");
+    else if (k==="Raw"){ this.emit("("); this.out.push(node.text); this.last=node.text[node.text.length-1]; this.lastType=""; this.emit(")"); }
+    else if (k==="Paren"){ this.emit("("); this.emitExpr(node.expr); this.emit(")"); }
+    else if (k==="Field"){ this.emitExpr(node.obj); this.emit("."); this.emit(node.name,"Name"); }
+    else if (k==="Index"){ this.emitExpr(node.obj); this.emit("["); this.emitExpr(node.index); this.emit("]"); }
+    else if (k==="Call"){ this.emitExpr(node.func); this.emitArgs(node.args); }
+    else if (k==="MethodCall"){ this.emitExpr(node.obj); this.emit(":"); this.emit(node.method,"Name"); this.emitArgs(node.args); }
+    else if (k==="Function"){ this.emit("function"); this.emitParams(node); this.emitBlock(node.body); this.emit("end"); }
+    else if (k==="Table") this.emitTable(node);
+    else if (k==="Binop"){ this.emitWrapped(node.lhs); if(node.op==="and"||node.op==="or")this.emit(node.op,"Name"); else this.emit(node.op); this.emitWrapped(node.rhs); }
+    else if (k==="Unop"){ if(node.op==="not")this.emit("not","Name"); else this.emit(node.op); this.emitWrapped(node.operand); }
+    else if (k==="IfExpr"){
+      node.clauses.forEach((c,i)=>{ this.emit(i===0?"if":"elseif"); this.emitExpr(c.cond); this.emit("then"); this.emitExpr(c.value); });
+      this.emit("else"); this.emitExpr(node.elseExpr);
+    }
+    else throw new Error("Generator: unknown expr kind "+k);
+  };
+  Generator.prototype.emitArgs = function (args){
+    this.emit("("); args.forEach((a,i)=>{ if(i>0)this.emit(","); this.emitExpr(a); }); this.emit(")");
+  };
+  Generator.prototype.emitParams = function (node){
+    this.emit("("); const n=node.params.length;
+    node.params.forEach((p,i)=>{ if(i>0)this.emit(","); this.emit(p,"Name"); });
+    if (node.isVararg){ if(n>0)this.emit(","); this.emit("..."); }
+    this.emit(")");
+  };
+  Generator.prototype.emitTable = function (node){
+    this.emit("{");
+    node.fields.forEach((f,i)=>{
+      if (i>0) this.emit(",");
+      if (f.type==="list") this.emitExpr(f.value);
+      else if (f.type==="name"){ this.emit(f.name,"Name"); this.emit("="); this.emitExpr(f.value); }
+      else { this.emit("["); this.emitExpr(f.key); this.emit("]"); this.emit("="); this.emitExpr(f.value); }
+    });
+    this.emit("}");
+  };
+  Generator.prototype.emitBlock = function (block){ for(const s of block.stats) this.emitStat(s); };
+  Generator.prototype.emitExprList = function (list){ list.forEach((e,i)=>{ if(i>0)this.emit(","); this.emitExpr(e); }); };
+  Generator.prototype.emitStat = function (s){
+    const k=s.kind;
+    if (k==="TypeAlias") return;
+    else if (k==="LocalAssign"){
+      this.emit("local");
+      s.names.forEach((nm,i)=>{ if(i>0)this.emit(","); this.emit(nm.name,"Name"); });
+      if (s.exprs.length>0){ this.emit("="); this.emitExprList(s.exprs); }
+      this.emit(";");
+    }
+    else if (k==="LocalFunction"){ this.emit("local"); this.emit("function"); this.emit(s.name,"Name"); this.emitParams(s.body); this.emitBlock(s.body.body); this.emit("end"); this.emit(";"); }
+    else if (k==="FunctionDecl"){ this.emit("function"); this.emitExpr(s.target); this.emitParams(s.body); this.emitBlock(s.body.body); this.emit("end"); this.emit(";"); }
+    else if (k==="Assign"){ s.targets.forEach((t,i)=>{ if(i>0)this.emit(","); this.emitExpr(t); }); this.emit("="); this.emitExprList(s.exprs); this.emit(";"); }
+    else if (k==="CompoundAssign"){ this.emitExpr(s.target); this.emit(s.op+"="); this.emitExpr(s.expr); this.emit(";"); }
+    else if (k==="ExprStat"){ this.emitExpr(s.expr); this.emit(";"); }
+    else if (k==="Do"){ this.emit("do"); this.emitBlock(s.body); this.emit("end"); }
+    else if (k==="While"){ this.emit("while"); this.emitExpr(s.cond); this.emit("do"); this.emitBlock(s.body); this.emit("end"); }
+    else if (k==="Repeat"){ this.emit("repeat"); this.emitBlock(s.body); this.emit("until"); this.emitExpr(s.cond); this.emit(";"); }
+    else if (k==="If"){
+      s.clauses.forEach((c,i)=>{ this.emit(i===0?"if":"elseif"); this.emitExpr(c.cond); this.emit("then"); this.emitBlock(c.body); });
+      if (s.elseBody){ this.emit("else"); this.emitBlock(s.elseBody); }
+      this.emit("end");
+    }
+    else if (k==="NumericFor"){
+      this.emit("for"); this.emit(s.var,"Name"); this.emit("="); this.emitExpr(s.startE); this.emit(","); this.emitExpr(s.stopE);
+      if (s.stepE){ this.emit(","); this.emitExpr(s.stepE); }
+      this.emit("do"); this.emitBlock(s.body); this.emit("end");
+    }
+    else if (k==="GenericFor"){
+      this.emit("for"); s.names.forEach((nm,i)=>{ if(i>0)this.emit(","); this.emit(nm,"Name"); });
+      this.emit("in"); this.emitExprList(s.exprs); this.emit("do"); this.emitBlock(s.body); this.emit("end");
+    }
+    else if (k==="Return"){ this.emit("return"); this.emitExprList(s.exprs); this.emit(";"); }
+    else if (k==="Break"){ this.emit("break"); this.emit(";"); }
+    else if (k==="Continue"){ this.emit("continue"); this.emit(";"); }
+    else throw new Error("Generator: unknown stat kind "+k);
+  };
+  function generate(ast){ const g=new Generator(); g.emitBlock(ast); return g.result(); }
+
+  // ---------------------------------------------------------------- Scope / rename
+  const ALPH = ["l","I","i","j","_"]; const BASE = ALPH.length;
+  function makeNameGen(prefix){
+    let n=0;
+    return function(){
+      n++; let x=n; const chars=[];
+      do { const d=(x-1)%BASE; chars.push(ALPH[d]); x=Math.floor((x-d-1)/BASE); } while (x>0);
+      return (prefix||"")+chars.join("");
+    };
+  }
+  function Resolver(nameGen){ this.scopes=[]; this.nameGen=nameGen; }
+  Resolver.prototype.push=function(){ this.scopes.push({}); };
+  Resolver.prototype.pop=function(){ this.scopes.pop(); };
+  Resolver.prototype.declare=function(name){ const b={original:name,new:this.nameGen()}; this.scopes[this.scopes.length-1][name]=b; return b; };
+  Resolver.prototype.resolve=function(name){ for(let i=this.scopes.length-1;i>=0;i--){ const b=this.scopes[i][name]; if(b)return b; } return null; };
+  Resolver.prototype.expr=function(node){
+    if (!node) return;
+    const k=node.kind;
+    if (k==="Name"){ const b=this.resolve(node.name); if(b)node.name=b.new; }
+    else if (k==="Paren") this.expr(node.expr);
+    else if (k==="Field") this.expr(node.obj);
+    else if (k==="Index"){ this.expr(node.obj); this.expr(node.index); }
+    else if (k==="Call"){ this.expr(node.func); this.exprList(node.args); }
+    else if (k==="MethodCall"){ this.expr(node.obj); this.exprList(node.args); }
+    else if (k==="Binop"){ this.expr(node.lhs); this.expr(node.rhs); }
+    else if (k==="Unop") this.expr(node.operand);
+    else if (k==="Function") this.func(node);
+    else if (k==="Table"){ for(const f of node.fields){ if(f.type==="rec")this.expr(f.key); this.expr(f.value); } }
+    else if (k==="IfExpr"){ for(const c of node.clauses){ this.expr(c.cond); this.expr(c.value); } this.expr(node.elseExpr); }
+  };
+  Resolver.prototype.exprList=function(list){ for(const e of list) this.expr(e); };
+  Resolver.prototype.func=function(node){
+    this.push();
+    for (let i=0;i<node.params.length;i++) node.params[i]=this.declare(node.params[i]).new;
+    this.block(node.body);
+    this.pop();
+  };
+  Resolver.prototype.block=function(block){ this.push(); for(const s of block.stats) this.stat(s); this.pop(); };
+  Resolver.prototype.blockInline=function(block){ for(const s of block.stats) this.stat(s); };
+  Resolver.prototype.stat=function(s){
+    const k=s.kind;
+    if (k==="LocalAssign"){ this.exprList(s.exprs); for(const nm of s.names) nm.name=this.declare(nm.name).new; }
+    else if (k==="LocalFunction"){ const b=this.declare(s.name); s.name=b.new; this.func(s.body); }
+    else if (k==="FunctionDecl"){ this.expr(s.target); this.func(s.body); }
+    else if (k==="Assign"){ for(const t of s.targets) this.expr(t); this.exprList(s.exprs); }
+    else if (k==="CompoundAssign"){ this.expr(s.target); this.expr(s.expr); }
+    else if (k==="ExprStat") this.expr(s.expr);
+    else if (k==="Do") this.block(s.body);
+    else if (k==="While"){ this.expr(s.cond); this.block(s.body); }
+    else if (k==="Repeat"){ this.push(); this.blockInline(s.body); this.expr(s.cond); this.pop(); }
+    else if (k==="If"){ for(const c of s.clauses){ this.expr(c.cond); this.block(c.body); } if(s.elseBody)this.block(s.elseBody); }
+    else if (k==="NumericFor"){ this.expr(s.startE); this.expr(s.stopE); if(s.stepE)this.expr(s.stepE); this.push(); s.var=this.declare(s.var).new; this.blockInline(s.body); this.pop(); }
+    else if (k==="GenericFor"){ this.exprList(s.exprs); this.push(); for(let i=0;i<s.names.length;i++)s.names[i]=this.declare(s.names[i]).new; this.blockInline(s.body); this.pop(); }
+    else if (k==="Return") this.exprList(s.exprs);
+  };
+  function renameLocals(ast, opts){
+    const r=new Resolver(makeNameGen(opts&&opts.prefix));
+    r.push(); r.blockInline(ast); r.pop();
+    return ast;
+  }
+
+  // ---------------------------------------------------------------- Numbers pass
+  function intValue(raw){
+    let s=raw.replace(/_/g,"");
+    if (/[eEpP.]/.test(s)) return null;
+    if (/^0[bB]/.test(s)){ const bits=s.slice(2); if(bits===""||/[^01]/.test(bits))return null; let v=0; for(let i=0;i<bits.length;i++)v=v*2+(bits.charCodeAt(i)-48); return v; }
+    if (/^0[xX]/.test(s)){ const v=parseInt(s,16); return isNaN(v)?null:v; }
+    if (/^\d+$/.test(s)) return parseInt(s,10);
+    return null;
+  }
+  const numNode = raw => ({ kind:"Number", raw:String(raw) });
+  function encodeNum(v, rng, depth){
+    if (depth<=0||v===0){
+      if (rng.chance(0.5)&&v>=0&&v<2**31) return numNode("0x"+v.toString(16).toUpperCase());
+      return numNode(v);
+    }
+    const pick=rng.int(1,3);
+    if (pick===1){ const a=rng.int(0,v); const b=v-a; return {kind:"Binop",op:"+",lhs:encodeNum(a,rng,depth-1),rhs:encodeNum(b,rng,depth-1)}; }
+    if (pick===2){ const d=rng.int(1,Math.max(1,v+16)); const c=v+d; return {kind:"Binop",op:"-",lhs:encodeNum(c,rng,depth-1),rhs:encodeNum(d,rng,depth-1)}; }
+    const f=rng.int(2,9); const g=Math.floor(v/f); const r=v-f*g;
+    const prod={kind:"Binop",op:"*",lhs:encodeNum(f,rng,depth-1),rhs:encodeNum(g,rng,depth-1)};
+    if (r===0) return prod;
+    return { kind:"Binop", op:"+", lhs:prod, rhs:encodeNum(r,rng,depth-1) };
+  }
+  function numbersRun(ast, ctx){
+    const depth=ctx.opts.numberDepth||2; const rng=ctx.rng; const visited=new Set();
+    function walk(node){
+      if (typeof node!=="object"||node===null||visited.has(node)) return;
+      visited.add(node);
+      if (node.kind==="Number"){
+        const v=intValue(node.raw);
+        if (v!==null&&v>=0&&v<2**53){
+          const expr=encodeNum(v,rng,depth);
+          if (expr.kind!=="Number"){ node.kind="Paren"; node.expr=expr; delete node.raw; }
+        }
+        return;
+      }
+      if (node.kind==="Raw") return;
+      for (const key in node){ const child=node[key]; if (typeof child==="object"&&child!==null&&key!=="str"){ if(Array.isArray(child)){ for(const c of child) walk(c); } else walk(child); } }
+    }
+    walk(ast);
+    return ast;
+  }
+
+  // ---------------------------------------------------------------- Strings pass
+  const KMIX = 2654435761;
+  function ks(s){ s=((s^((s<<13)>>>0))>>>0); s=((s^(s>>>17))>>>0); s=((s^((s<<5)>>>0))>>>0); return s>>>0; }
+  function slotSeed(seed,j){ return ((seed + j*KMIX) % 4294967295) + 1; }
+
+  const utf8 = (typeof TextEncoder!=="undefined") ? new TextEncoder() : null;
+  function strToBytes(str){
+    if (utf8) return Array.from(utf8.encode(str));
+    const out=[]; for (let i=0;i<str.length;i++){ let c=str.charCodeAt(i);
+      if (c<0x80) out.push(c);
+      else if (c<0x800){ out.push(0xC0|(c>>6),0x80|(c&0x3F)); }
+      else { out.push(0xE0|(c>>12),0x80|((c>>6)&0x3F),0x80|(c&0x3F)); } }
+    return out;
+  }
+  // unescape a Lua short-string inner body to a byte array
+  function shortToBytes(inner){
+    const bytes=[]; let i=0;
+    function pushStr(s){ for (const b of strToBytes(s)) bytes.push(b); }
+    while (i<inner.length){
+      const c=inner[i];
+      if (c!=="\\"){ pushStr(c); i++; continue; }
+      i++; const e=inner[i];
+      if (e===undefined) break;
+      if (e==="n"){ bytes.push(10); i++; }
+      else if (e==="t"){ bytes.push(9); i++; }
+      else if (e==="r"){ bytes.push(13); i++; }
+      else if (e==="a"){ bytes.push(7); i++; }
+      else if (e==="b"){ bytes.push(8); i++; }
+      else if (e==="f"){ bytes.push(12); i++; }
+      else if (e==="v"){ bytes.push(11); i++; }
+      else if (e==="\\"){ bytes.push(92); i++; }
+      else if (e==='"'){ bytes.push(34); i++; }
+      else if (e==="'"){ bytes.push(39); i++; }
+      else if (e==="\n"){ bytes.push(10); i++; }
+      else if (e==="x"){ const h=inner.substr(i+1,2); bytes.push(parseInt(h,16)&0xFF); i+=3; }
+      else if (e==="z"){ i++; while(i<inner.length&&/\s/.test(inner[i]))i++; }
+      else if (e==="u"){ // \u{XXXX}
+        let j=i+1; if(inner[j]==="{"){ j++; let hex=""; while(j<inner.length&&inner[j]!=="}"){ hex+=inner[j]; j++; } const cp=parseInt(hex,16); pushStr(String.fromCodePoint(cp)); i=j+1; }
+        else { bytes.push(117); i++; }
+      }
+      else if (/[0-9]/.test(e)){ let d=e; let j=i+1; let n=1; while(n<3&&j<inner.length&&/[0-9]/.test(inner[j])){ d+=inner[j]; j++; n++; } bytes.push(parseInt(d,10)&0xFF); i=j; }
+      else { pushStr(e); i++; }
+    }
+    return bytes;
+  }
+  function realBytes(str){
+    if (str.kind==="long") return strToBytes(str.value);
+    if (str.kind==="short") return shortToBytes(str.value);
+    return null;
+  }
+  function encryptToLiteral(bytes, seed, j){
+    let s=slotSeed(seed,j); const parts=[];
+    for (let i=0;i<bytes.length;i++){ s=ks(s); const k=s%256; const enc=(bytes[i]^k)&0xFF; parts.push("\\"+enc); }
+    return '"'+parts.join("")+'"';
+  }
+  function buildDecoderSource(dataLiterals, perm, seed){
+    const data="{"+dataLiterals.join(",")+"}";
+    const permSrc="{"+perm.join(",")+"}";
+    return "(function()\n"+
+      "local d="+data+"\n"+
+      "local p="+permSrc+"\n"+
+      "local SEED="+seed+"\n"+
+      "local function ks(s)\n"+
+      "s=bit32.bxor(s,bit32.lshift(s,13))\n"+
+      "s=bit32.bxor(s,bit32.rshift(s,17))\n"+
+      "s=bit32.bxor(s,bit32.lshift(s,5))\n"+
+      "return s\n"+
+      "end\n"+
+      "local pool={}\n"+
+      "local bc=string.byte\n"+
+      "local ch=string.char\n"+
+      "local cc=table.concat\n"+
+      "for j=1,#d do\n"+
+      "local enc=d[j]\n"+
+      "local s=((SEED+j*"+KMIX+")%4294967295)+1\n"+
+      "local out={}\n"+
+      "for i=1,#enc do\n"+
+      "s=ks(s)\n"+
+      "out[i]=ch(bit32.bxor(bc(enc,i),s%256))\n"+
+      "end\n"+
+      "pool[p[j]]=cc(out)\n"+
+      "end\n"+
+      "return pool\n"+
+      "end)()";
+  }
+  function stringsRun(ast, ctx){
+    const seed=ctx.seed>>>0; const poolName=ctx.poolName;
+    const values=[]; const indexOf=new Map(); const byteCache=[];
+    const visited=new Set();
+    function collect(node){
+      const bytes=realBytes(node.str);
+      if (bytes===null) return null;
+      const key=bytes.join(",");
+      let idx=indexOf.get(key);
+      if (idx===undefined){ values.push(bytes); idx=values.length; indexOf.set(key,idx); }
+      return idx;
+    }
+    function walk(node){
+      if (typeof node!=="object"||node===null||visited.has(node)) return;
+      visited.add(node);
+      if (node.kind==="Raw") return;
+      if (node.kind==="String"){
+        const idx=collect(node);
+        if (idx){ node.kind="Index"; node.obj={kind:"Name",name:poolName}; node.index={kind:"Number",raw:String(idx)}; delete node.str; }
+        return;
+      }
+      for (const key in node){ const child=node[key]; if (typeof child==="object"&&child!==null&&key!=="str"){ if(Array.isArray(child)){ for(const c of child) walk(c); } else walk(child); } }
+    }
+    for (const s of ast.stats) walk(s);
+    const n=values.length;
+    if (n===0) return { ast, prelude:null };
+    const perm=[]; for (let i=1;i<=n;i++) perm.push(i); ctx.rng.shuffle(perm);
+    const dataLiterals=[];
+    for (let j=1;j<=n;j++){ const originalIndex=perm[j-1]; dataLiterals.push(encryptToLiteral(values[originalIndex-1], seed, j)); }
+    const decoder=buildDecoderSource(dataLiterals, perm, seed);
+    const prelude={ kind:"LocalAssign", names:[{name:poolName}], exprs:[{kind:"Raw",text:decoder}] };
+    return { ast, prelude };
+  }
+
+  // ---------------------------------------------------------------- Flatten pass
+  const nameNode = n => ({ kind:"Name", name:n });
+  function collectNamesSet(root){
+    const used=new Set(); const seen=new Set();
+    function walk(node){
+      if (typeof node!=="object"||node===null||seen.has(node)) return;
+      seen.add(node);
+      if (node.kind==="Raw") return;
+      if (typeof node.name==="string") used.add(node.name);
+      if (typeof node.method==="string") used.add(node.method);
+      for (const key in node){ const v=node[key]; if (typeof v==="object"&&v!==null){ if(Array.isArray(v)){ for(const c of v) walk(c); } else walk(v); } }
+    }
+    walk(root); return used;
+  }
+  function collectBlocks(ast){
+    const blocks=[ast]; const seen=new Set();
+    function walk(node){
+      if (typeof node!=="object"||node===null||seen.has(node)) return;
+      seen.add(node);
+      if (node.kind==="Raw") return;
+      if (node.kind==="Function"&&typeof node.body==="object") blocks.push(node.body);
+      for (const key in node){ const v=node[key]; if (typeof v==="object"&&v!==null){ if(Array.isArray(v)){ for(const c of v) walk(c); } else walk(v); } }
+    }
+    walk(ast); return blocks;
+  }
+  function flattenBlock(block, ctx, freshName){
+    const stats=block.stats;
+    if (stats.length<3) return;
+    for (const s of stats){ if (s.kind==="Break"||s.kind==="Continue") return; }
+    const n=stats.length;
+    const ids=[]; for (let i=1;i<=n;i++) ids.push(i); ctx.rng.shuffle(ids);
+    const stateVar=freshName();
+    const hoist=[]; const hoistSeen=new Set(); const branches=[];
+    for (let idx=0;idx<n;idx++){
+      const s=stats[idx]; const body=[]; let isReturn=false;
+      if (s.kind==="LocalAssign"){
+        for (const nm of s.names){ if(!hoistSeen.has(nm.name)){ hoistSeen.add(nm.name); hoist.push(nm.name); } }
+        if (s.exprs.length>0){ const targets=s.names.map(nm=>nameNode(nm.name)); body.push({kind:"Assign",targets,exprs:s.exprs}); }
+      } else if (s.kind==="LocalFunction"){
+        if(!hoistSeen.has(s.name)){ hoistSeen.add(s.name); hoist.push(s.name); }
+        body.push({ kind:"Assign", targets:[nameNode(s.name)], exprs:[s.body] });
+      } else if (s.kind==="Return"){ isReturn=true; body.push(s); }
+      else body.push(s);
+      if (!isReturn){ const nextId=(idx<n-1)?ids[idx+1]:0; body.push({kind:"Assign",targets:[nameNode(stateVar)],exprs:[numNode(nextId)]}); }
+      branches[idx]={ id:ids[idx], body };
+    }
+    const order=[]; for (let i=0;i<n;i++) order.push(i); ctx.rng.shuffle(order);
+    const clauses=order.map(idx=>({ cond:{kind:"Binop",op:"==",lhs:nameNode(stateVar),rhs:numNode(branches[idx].id)}, body:{kind:"Block",stats:branches[idx].body} }));
+    const ifStat={ kind:"If", clauses, elseBody:null };
+    const whileStat={ kind:"While", cond:{kind:"Binop",op:"~=",lhs:nameNode(stateVar),rhs:numNode(0)}, body:{kind:"Block",stats:[ifStat]} };
+    const newStats=[];
+    if (hoist.length>0) newStats.push({ kind:"LocalAssign", names:hoist.map(h=>({name:h})), exprs:[] });
+    newStats.push({ kind:"LocalAssign", names:[{name:stateVar}], exprs:[numNode(ids[0])] });
+    newStats.push(whileStat);
+    block.stats=newStats;
+  }
+  function flattenRun(ast, ctx){
+    const used=collectNamesSet(ast); let counter=0;
+    function freshName(){ while(true){ counter++; const cand="_DLUf"+counter; if(!used.has(cand)){ used.add(cand); return cand; } } }
+    for (const block of collectBlocks(ast)) flattenBlock(block, ctx, freshName);
+    return ast;
+  }
+
+  // ---------------------------------------------------------------- Pipeline
+  const PROFILES = {
+    none:     { rename:false, strings:false, numbers:false, flatten:false },
+    light:    { rename:true,  strings:false, numbers:false, flatten:false },
+    balanced: { rename:true,  strings:true,  numbers:true,  flatten:false },
+    max:      { rename:true,  strings:true,  numbers:true,  flatten:true  },
+  };
+  function obfuscate(source, opts){
+    opts=opts||{};
+    const profileName=opts.profile||"balanced";
+    const profile=PROFILES[profileName];
+    if (!profile) throw new Error("DeepLuaU: unknown profile '"+profileName+"'");
+    const seed=(opts.seed!==undefined&&opts.seed!==null)?opts.seed:(Math.floor(Math.random()*4294967296));
+    const rng=new Rng(seed>>>0);
+    const ast=new Parser(source).parse();
+    const ctx={ rng, seed:seed>>>0, opts, poolName:"_DLU_pool" };
+    let prelude=null;
+    if (profile.strings){ const r=stringsRun(ast, ctx); prelude=r.prelude; }
+    if (profile.numbers) numbersRun(ast, ctx);
+    if (prelude) ast.stats.unshift(prelude);
+    if (profile.rename) renameLocals(ast, { prefix:opts.namePrefix });
+    if (profile.flatten) flattenRun(ast, ctx);
+    let out=generate(ast);
+    if (opts.header!==false) out="--[[ Protected with DeepLuaU ]] "+out;
+    return out;
+  }
+
+  const api = { obfuscate, PROFILES, _internal:{ Lexer, Parser, generate, renameLocals } };
+  if (typeof module!=="undefined"&&module.exports) module.exports=api;
+  root.DeepLuaU=api;
+})(typeof globalThis!=="undefined"?globalThis:this);
+
+</script>
+
+<script>
+(function(){
+  "use strict";
+  var $=function(s){return document.querySelector(s)};
+  var inEl=$("#in"), outEl=$("#out"), seedEl=$("#seed"), exEl=$("#example");
+  var stIn=$("#st-in"), stOut=$("#st-out"), stRatio=$("#st-ratio"), stStr=$("#st-str"), stTime=$("#st-time");
+  var costEl=$("#cost"), costDot=$("#costdot");
+  var profile="balanced";
+
+  var COST={
+    none:{t:"load-time only",c:"var(--green)"},
+    light:{t:"zero",c:"var(--green)"},
+    balanced:{t:"near-zero",c:"var(--accent)"},
+    max:{t:"small per-call",c:"var(--amber)"}
+  };
+
+  var EXAMPLES={
+vector:
+'--!strict\\n'+
+'-- 2D vector with a metatable\\n'+
+'local Vec = {}\\n'+
+'Vec.__index = Vec\\n\\n'+
+'function Vec.new(x: number, y: number)\\n'+
+'\\treturn setmetatable({ x = x, y = y }, Vec)\\n'+
+'end\\n\\n'+
+'function Vec:length(): number\\n'+
+'\\treturn math.sqrt(self.x * self.x + self.y * self.y)\\n'+
+'end\\n\\n'+
+'function Vec:scale(k: number)\\n'+
+'\\treturn Vec.new(self.x * k, self.y * k)\\n'+
+'end\\n\\n'+
+'local v = Vec.new(3, 4):scale(2)\\n'+
+'print("length is " .. tostring(v:length()))\\n',
+roblox:
+'local Players = game:GetService("Players")\\n'+
+'local RunService = game:GetService("RunService")\\n'+
+'local part = workspace:FindFirstChild("Brick")\\n\\n'+
+'local SPEED = 5\\n'+
+'local function onHeartbeat(dt: number)\\n'+
+'\\tlocal player = Players.LocalPlayer\\n'+
+'\\tif player and part then\\n'+
+'\\t\\tpart.Position = part.Position + Vector3.new(0, dt * SPEED, 0)\\n'+
+'\\tend\\n'+
+'end\\n\\n'+
+'RunService.Heartbeat:Connect(onHeartbeat)\\n'+
+'print(("ready"):upper())\\n',
+loop:
+'-- a hot loop: numbers fold, the string is pooled once\\n'+
+'local total = 0\\n'+
+'local label = "tick #"\\n'+
+'for i = 1, 1000 do\\n'+
+'\\tlocal x = (i * 3 + 7) % 101\\n'+
+'\\ttotal += math.floor(math.sqrt(x * x + i))\\n'+
+'\\tif x == 0 then\\n'+
+'\\t\\tprint(label .. tostring(i))\\n'+
+'\\tend\\n'+
+'end\\n'+
+'print("total:", total)\\n'
+  };
+
+  function setProfile(p){
+    profile=p;
+    document.querySelectorAll("#profile button").forEach(function(b){
+      b.setAttribute("aria-pressed", b.dataset.p===p ? "true":"false");
+    });
+    var c=COST[p]; costEl.textContent=c.t; costDot.style.background=c.c;
+    run();
+  }
+  function fmt(n){ return n.toLocaleString("en-US"); }
+
+  var timer=null;
+  function schedule(){ if(timer)clearTimeout(timer); timer=setTimeout(run,140); }
+
+  function run(){
+    var src=inEl.value;
+    var seed=parseInt(seedEl.value,10); if(isNaN(seed))seed=undefined;
+    var t0=performance.now();
+    var result, ok=true;
+    try{ result=DeepLuaU.obfuscate(src,{profile:profile,seed:seed}); }
+    catch(e){ ok=false; result="-- could not obfuscate:\\n-- "+String(e.message||e); }
+    var t1=performance.now();
+    outEl.value=result;
+    outEl.classList.toggle("err",!ok);
+    stIn.textContent=fmt(src.length);
+    if(ok){
+      stOut.textContent=fmt(result.length);
+      var pct=src.length? Math.round(result.length/src.length*100):0;
+      stRatio.textContent=pct+"%";
+      stRatio.className=pct>100?"grow":(pct<100?"shrink":"");
+      // count pooled strings by probing the AST path indirectly: parse + strings
+      var sc=0;
+      try{
+        if(profile==="balanced"||profile==="max"){
+          var m=result.match(/local p=\\{([^}]*)\\}/);
+          if(m){ sc=m[1].split(",").filter(function(x){return x.trim()!==""}).length; }
+        }
+      }catch(_){}
+      stStr.textContent=fmt(sc);
+      stTime.textContent=(t1-t0).toFixed(1);
+    } else {
+      stOut.textContent="—"; stRatio.textContent="—"; stRatio.className="";
+      stStr.textContent="0"; stTime.textContent=(t1-t0).toFixed(1);
+    }
+  }
+
+  // wire controls
+  document.querySelectorAll("#profile button").forEach(function(b){
+    b.addEventListener("click",function(){ setProfile(b.dataset.p); });
+  });
+  seedEl.addEventListener("input",schedule);
+  inEl.addEventListener("input",schedule);
+  $("#dice").addEventListener("click",function(){ seedEl.value=Math.floor(Math.random()*100000); run(); });
+  $("#clear").addEventListener("click",function(){ inEl.value=""; run(); inEl.focus(); });
+  exEl.addEventListener("change",function(){ inEl.value=EXAMPLES[exEl.value]||""; run(); });
+  $("#copy").addEventListener("click",function(){
+    var btn=this;
+    function done(){ var o=btn.textContent; btn.textContent="copied ✓"; setTimeout(function(){btn.textContent=o;},1200); }
+    try{
+      navigator.clipboard.writeText(outEl.value).then(done,function(){ outEl.select(); done(); });
+    }catch(e){ outEl.select(); done(); }
+  });
+
+  // theme toggle
+  var themeBtn=$("#theme");
+  function stored(){ try{ return localStorage.getItem("dlu-theme"); }catch(e){ return null; } }
+  function currentMode(){
+    var attr=document.documentElement.getAttribute("data-theme");
+    if(attr) return attr;
+    return window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";
+  }
+  (function initTheme(){ var s=stored(); if(s)document.documentElement.setAttribute("data-theme",s); })();
+  themeBtn.addEventListener("click",function(){
+    var next=currentMode()==="dark"?"light":"dark";
+    document.documentElement.setAttribute("data-theme",next);
+    try{ localStorage.setItem("dlu-theme",next); }catch(e){}
+  });
+
+  // boot
+  inEl.value=EXAMPLES.vector;
+  setProfile("balanced");
+})();
+</script>
