@@ -1,0 +1,5 @@
+# transient test artifacts
+tests/_*.luau
+tests/sample_src.luau
+tests/bench_src.luau
+*.err
