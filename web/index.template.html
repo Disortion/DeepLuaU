@@ -1,205 +1,151 @@
 <title>DeepLuaU</title>
-<meta name="description" content="Client-side Luau obfuscator that protects source without costing runtime performance.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<meta name="description" content="A browser-based Luau obfuscator that protects source without costing runtime performance.">
 <style>
-/* Layout: a terminal "workbench" — sticky bar, compact hero, two-pane obfuscator,
-   then explanatory sections. Dark-first; cyan primary with an amber signal accent. */
+/* Layout: a single calm column — header, the tool, then short reference sections.
+   System fonts, one indigo accent used sparingly, light-first with a dark mapping. */
 :root{
-  --bg:#0b0f17; --panel:#111726; --panel-2:#0e1420; --edge:#1e293b; --edge-soft:#172033;
-  --fg:#dbe4f0; --muted:#8597b0; --faint:#5e6f88;
-  --accent:#34e0cf; --accent-ink:#052b28; --amber:#f6b352; --rose:#ff6b7a; --green:#54d98a;
-  --shadow:0 18px 50px -24px rgba(0,0,0,.8);
-  --display:"Chakra Petch",ui-sans-serif,system-ui,sans-serif;
-  --body:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
-  color-scheme:dark;
-}
-@media (prefers-color-scheme:light){ :root:not([data-theme="dark"]){
-  --bg:#eef1f6; --panel:#ffffff; --panel-2:#f4f6fb; --edge:#d7deea; --edge-soft:#e5eaf3;
-  --fg:#17202e; --muted:#53627a; --faint:#8493a9;
-  --accent:#0d9488; --accent-ink:#eafffb; --amber:#b4701a; --rose:#d33a4b; --green:#1c9d57;
-  --shadow:0 18px 44px -26px rgba(20,35,60,.35);
+  --bg:#ffffff; --surface:#fafafa; --code-bg:#f6f6f7;
+  --fg:#18181b; --muted:#6b7280; --faint:#9ca3af;
+  --border:#e8e8ec; --border-strong:#d6d6db;
+  --accent:#4f46e5; --accent-fg:#ffffff;
+  --ok:#15803d; --warn:#b45309;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   color-scheme:light;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --bg:#0e0e11; --surface:#161619; --code-bg:#121216;
+  --fg:#e8e8eb; --muted:#9a9aa5; --faint:#6b6b76;
+  --border:#26262c; --border-strong:#36363e;
+  --accent:#8f8bff; --accent-fg:#0e0e11;
+  --ok:#4ade80; --warn:#fbbf24;
+  color-scheme:dark;
 }}
-:root[data-theme="light"]{
-  --bg:#eef1f6; --panel:#ffffff; --panel-2:#f4f6fb; --edge:#d7deea; --edge-soft:#e5eaf3;
-  --fg:#17202e; --muted:#53627a; --faint:#8493a9;
-  --accent:#0d9488; --accent-ink:#eafffb; --amber:#b4701a; --rose:#d33a4b; --green:#1c9d57;
-  --shadow:0 18px 44px -26px rgba(20,35,60,.35);
-  color-scheme:light;
-}
 :root[data-theme="dark"]{
-  --bg:#0b0f17; --panel:#111726; --panel-2:#0e1420; --edge:#1e293b; --edge-soft:#172033;
-  --fg:#dbe4f0; --muted:#8597b0; --faint:#5e6f88;
-  --accent:#34e0cf; --accent-ink:#052b28; --amber:#f6b352; --rose:#ff6b7a; --green:#54d98a;
+  --bg:#0e0e11; --surface:#161619; --code-bg:#121216;
+  --fg:#e8e8eb; --muted:#9a9aa5; --faint:#6b6b76;
+  --border:#26262c; --border-strong:#36363e;
+  --accent:#8f8bff; --accent-fg:#0e0e11;
+  --ok:#4ade80; --warn:#fbbf24;
   color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --bg:#ffffff; --surface:#fafafa; --code-bg:#f6f6f7;
+  --fg:#18181b; --muted:#6b7280; --faint:#9ca3af;
+  --border:#e8e8ec; --border-strong:#d6d6db;
+  --accent:#4f46e5; --accent-fg:#ffffff;
+  --ok:#15803d; --warn:#b45309;
+  color-scheme:light;
 }
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--fg);font-family:var(--body);line-height:1.6;
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:15px;line-height:1.6;
   -webkit-font-smoothing:antialiased;overflow-x:hidden}
-.wrap{max-width:1120px;margin-inline:auto;padding-inline:20px}
+.page{max-width:960px;margin-inline:auto;padding-inline:20px;padding-block:0}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:5px}
+h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}
 
-/* top bar */
-.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;
-  background:color-mix(in srgb,var(--bg) 86%,transparent);backdrop-filter:blur(10px);
-  border-bottom:1px solid var(--edge)}
-.bar .wrap{display:flex;align-items:center;gap:14px;padding-block:12px}
-.brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:700;
-  letter-spacing:.3px;font-size:18px}
-.glyph{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;
-  background:linear-gradient(145deg,var(--accent),#1aa89a);color:var(--accent-ink);
-  font-family:var(--mono);font-weight:700;font-size:15px}
-.brand small{color:var(--faint);font-family:var(--mono);font-weight:500;font-size:11px;
-  letter-spacing:.5px;text-transform:uppercase}
-.bar .spacer{flex:1}
-.iconbtn{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:9px;
-  border:1px solid var(--edge);background:var(--panel);color:var(--fg);cursor:pointer;font-size:16px}
-.iconbtn:hover{border-color:var(--accent)}
-.ghlink{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--edge);
-  background:var(--panel);color:var(--fg);padding:8px 13px;border-radius:9px;font-size:13px;font-weight:500}
-.ghlink:hover{border-color:var(--accent);text-decoration:none}
+/* header */
+header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+  padding-block:26px 22px;flex-wrap:wrap}
+header h1{font-size:21px}
+header .tag{color:var(--muted);font-size:14px;margin-top:3px}
+.head-actions{display:flex;align-items:center;gap:8px}
+.btn{font:inherit;font-size:13px;cursor:pointer;border:1px solid var(--border-strong);
+  background:var(--surface);color:var(--fg);padding:7px 12px;border-radius:8px;display:inline-flex;
+  align-items:center;gap:7px;line-height:1}
+.btn:hover{border-color:var(--accent);text-decoration:none}
+.btn.ghost{background:transparent}
 
-/* hero */
-.hero{padding-block:46px 30px}
-.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:2.5px;text-transform:uppercase;
-  color:var(--accent);margin:0 0 14px}
-h1{font-family:var(--display);font-weight:700;font-size:clamp(38px,7vw,66px);line-height:1.02;
-  margin:0;letter-spacing:-.5px;text-wrap:balance}
-h1 .u{color:var(--accent)}
-.lede{font-size:clamp(16px,2.4vw,20px);color:var(--muted);max-width:60ch;margin:18px 0 0}
-.badges{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}
-.badge{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;
-  color:var(--muted);border:1px solid var(--edge-soft);background:var(--panel-2);
-  padding:6px 11px;border-radius:99px}
-.badge b{color:var(--green);font-weight:700}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px color-mix(in srgb,var(--green) 25%,transparent)}
+/* tool */
+.tool{border:1px solid var(--border);border-radius:12px;background:var(--surface);overflow:hidden}
+.controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px;padding:14px 16px;border-bottom:1px solid var(--border)}
+.ctl{display:flex;flex-direction:column;gap:6px}
+.ctl > label{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--faint)}
+.seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden;background:var(--bg)}
+.seg button{font:inherit;font-size:13px;border:0;background:transparent;color:var(--muted);
+  padding:7px 13px;cursor:pointer;border-right:1px solid var(--border)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);font-weight:500}
+.row{display:flex;align-items:center;gap:8px}
+input[type="number"]{font:inherit;font-size:14px;width:92px;background:var(--bg);color:var(--fg);
+  border:1px solid var(--border-strong);border-radius:8px;padding:7px 10px}
+select{font:inherit;font-size:14px;background:var(--bg);color:var(--fg);border:1px solid var(--border-strong);
+  border-radius:8px;padding:7px 10px}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+.controls .spacer{flex:1 1 auto;min-width:0}
+.link{font-size:13px;color:var(--accent);background:none;border:0;cursor:pointer;padding:0}
+.link:hover{text-decoration:underline}
 
-/* workbench */
-.panel{background:var(--panel);border:1px solid var(--edge);border-radius:16px;box-shadow:var(--shadow)}
-.work{margin-top:12px;overflow:hidden}
-.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;padding:14px 16px;
-  border-bottom:1px solid var(--edge);background:var(--panel-2)}
-.field{display:flex;flex-direction:column;gap:5px}
-.field > label{font-family:var(--mono);font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--faint)}
-.seg{display:inline-flex;background:var(--bg);border:1px solid var(--edge);border-radius:10px;padding:3px}
-.seg button{appearance:none;border:0;background:transparent;color:var(--muted);cursor:pointer;
-  font-family:var(--mono);font-size:12.5px;font-weight:500;padding:7px 12px;border-radius:7px}
-.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:700}
-.ctrl{display:flex;align-items:center;gap:8px}
-input[type="number"]{width:104px;font-family:var(--mono);font-size:13px;background:var(--bg);
-  color:var(--fg);border:1px solid var(--edge);border-radius:9px;padding:8px 10px}
-select{font-family:var(--body);font-size:13px;background:var(--bg);color:var(--fg);
-  border:1px solid var(--edge);border-radius:9px;padding:8px 10px}
-input:focus,select:focus{border-color:var(--accent);outline:none}
-.toolbar .spacer{flex:1;min-width:0}
-.cost{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;align-items:center;gap:7px;white-space:nowrap}
-.cost b{color:var(--fg);font-weight:700}
-
-.panes{display:grid;grid-template-columns:1fr 1fr;min-height:420px}
-.pane{display:flex;flex-direction:column;min-width:0}
-.pane + .pane{border-left:1px solid var(--edge)}
-.pane-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--edge-soft)}
-.pane-head h2{font-family:var(--mono);font-size:12px;letter-spacing:1px;text-transform:uppercase;
-  color:var(--faint);margin:0;font-weight:700}
-.pane-head .spacer{flex:1}
-.mini{appearance:none;border:1px solid var(--edge);background:var(--bg);color:var(--muted);
-  cursor:pointer;font-family:var(--mono);font-size:11.5px;padding:5px 10px;border-radius:7px}
+.io{display:grid;grid-template-columns:1fr 1fr}
+.col{display:flex;flex-direction:column;min-width:0}
+.col + .col{border-left:1px solid var(--border)}
+.col-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.col-head h2{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--faint)}
+.col-head .ext{color:var(--faint);font-size:11px;font-weight:400;text-transform:none;letter-spacing:0}
+.col-head .spacer{flex:1}
+.mini{font:inherit;font-size:12px;cursor:pointer;border:1px solid var(--border-strong);background:var(--bg);
+  color:var(--muted);padding:4px 10px;border-radius:7px}
 .mini:hover{border-color:var(--accent);color:var(--fg)}
-textarea{flex:1;width:100%;resize:none;border:0;background:var(--panel);color:var(--fg);
-  font-family:var(--mono);font-size:13px;line-height:1.65;padding:14px;white-space:pre;overflow:auto;tab-size:4}
+textarea{width:100%;min-height:340px;resize:vertical;border:0;background:var(--bg);color:var(--fg);
+  font-family:var(--mono);font-size:13px;line-height:1.6;padding:14px;white-space:pre;overflow:auto;tab-size:4}
 textarea:focus{outline:none}
-#out{background:var(--panel-2)}
-#out.err{color:var(--rose)}
-.statbar{display:flex;flex-wrap:wrap;gap:10px 22px;padding:11px 16px;border-top:1px solid var(--edge);
-  background:var(--panel-2);font-family:var(--mono);font-size:12px;color:var(--muted)}
-.statbar .s b{color:var(--fg);font-weight:700}
-.statbar .s span{color:var(--faint)}
-.grow{color:var(--amber)!important}
-.shrink{color:var(--green)!important}
+#out{background:var(--code-bg)}
+#out.err{color:var(--warn)}
+#in.drop{outline:2px dashed var(--accent);outline-offset:-6px}
+.stats{display:flex;flex-wrap:wrap;gap:6px 20px;padding:10px 16px;border-top:1px solid var(--border);
+  font-family:var(--mono);font-size:12px;color:var(--muted)}
+.stats b{color:var(--fg);font-weight:600}
+.stats .cost-ok b{color:var(--ok)} .stats .cost-warn b{color:var(--warn)}
 
-/* sections */
-section.block{padding-block:52px 8px}
-.kicker{font-family:var(--mono);font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin:0 0 10px}
-h3{font-family:var(--display);font-weight:600;font-size:clamp(24px,3.6vw,32px);margin:0;letter-spacing:-.3px;text-wrap:balance}
-.sub{color:var(--muted);max-width:66ch;margin:12px 0 0}
-.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:26px}
-.card{background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:20px}
-.card h4{font-family:var(--display);font-weight:600;font-size:17px;margin:0 0 8px;display:flex;align-items:center;gap:9px}
-.card p{color:var(--muted);font-size:14px;margin:0}
-.tag{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
-  color:var(--green);border:1px solid color-mix(in srgb,var(--green) 40%,transparent);
-  background:color-mix(in srgb,var(--green) 12%,transparent);padding:3px 7px;border-radius:6px}
-
-.proof{margin-top:22px;background:var(--panel-2);border:1px solid var(--edge);border-radius:14px;
-  padding:18px 20px;display:flex;flex-wrap:wrap;align-items:center;gap:14px}
-.proof code{font-family:var(--mono);font-size:13px;background:var(--bg);border:1px solid var(--edge);
-  padding:6px 10px;border-radius:8px;color:var(--fg);white-space:nowrap}
-.proof .arrow{color:var(--accent);font-family:var(--mono);font-weight:700}
-.proof p{margin:0;color:var(--muted);font-size:13.5px;min-width:0}
-
-.tablewrap{margin-top:24px;overflow-x:auto;border:1px solid var(--edge);border-radius:14px}
-table{border-collapse:collapse;width:100%;min-width:560px;font-size:14px}
-th,td{text-align:left;padding:13px 16px;border-bottom:1px solid var(--edge-soft);vertical-align:top}
-thead th{font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;
-  color:var(--faint);background:var(--panel-2)}
+/* reference */
+section.ref{padding-block:34px 0}
+section.ref:first-of-type{padding-top:40px}
+.ref h3{font-size:16px;margin-bottom:6px}
+.ref p.lead{color:var(--muted);margin:0 0 16px;max-width:68ch}
+.points{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.point{border:1px solid var(--border);border-radius:10px;padding:16px;background:var(--surface)}
+.point h4{margin:0 0 5px;font-size:14px;font-weight:600}
+.point p{margin:0;color:var(--muted);font-size:13.5px}
+code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);border:1px solid var(--border);
+  padding:1px 5px;border-radius:5px}
+.tablewrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:540px;font-size:13.5px}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+thead th{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);background:var(--surface);font-weight:600}
 tbody tr:last-child td{border-bottom:0}
-td code,th code{font-family:var(--mono);font-size:12.5px;background:var(--panel-2);padding:2px 6px;border-radius:5px}
-.pill{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;white-space:nowrap}
-.pill.none{color:var(--green);background:color-mix(in srgb,var(--green) 14%,transparent)}
-.pill.low{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
-.pill.some{color:var(--amber);background:color-mix(in srgb,var(--amber) 16%,transparent)}
-.eff b{color:var(--fg)}
+.eff{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.eff.n{color:var(--ok)} .eff.s{color:var(--warn)}
+.callout{border-left:3px solid var(--border-strong);padding:2px 0 2px 16px;color:var(--muted);font-size:13.5px;margin-top:16px}
+.callout b{color:var(--fg)}
+footer{padding-block:32px 44px;margin-top:36px;border-top:1px solid var(--border);color:var(--faint);
+  font-size:13px;display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between}
 
-.note{margin-top:22px;border-left:3px solid var(--amber);background:var(--panel-2);
-  border-radius:0 12px 12px 0;padding:16px 18px;color:var(--muted);font-size:14px}
-.note b{color:var(--fg)}
-
-footer{margin-top:60px;border-top:1px solid var(--edge);padding-block:28px 40px;color:var(--faint);font-size:13px}
-footer .wrap{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
-footer .mono{font-family:var(--mono)}
-
-@media (max-width:760px){
-  .panes{grid-template-columns:1fr}
-  .pane + .pane{border-left:0;border-top:1px solid var(--edge)}
-  .cards{grid-template-columns:1fr}
-  .toolbar .spacer{display:none}
+@media (max-width:720px){
+  .io{grid-template-columns:1fr}
+  .col + .col{border-left:0;border-top:1px solid var(--border)}
+  .points{grid-template-columns:1fr}
+  textarea{min-height:240px}
 }
-@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
-<header class="bar">
-  <div class="wrap">
-    <div class="brand"><span class="glyph">Lu</span> DeepLuaU <small>obfuscator</small></div>
-    <span class="spacer"></span>
-    <a class="ghlink" href="https://github.com/Disortion/DeepLuaU" target="_blank" rel="noopener">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38v-1.33c-2.23.49-2.7-1.08-2.7-1.08-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.71 1.22 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-      Source
-    </a>
-    <button class="iconbtn" id="theme" title="Toggle theme" aria-label="Toggle theme">◐</button>
-  </div>
-</header>
-
-<main class="wrap">
-  <section class="hero">
-    <p class="eyebrow">Luau source protection</p>
-    <h1>Obfuscate <span class="u">Luau</span> without<br>losing a single frame.</h1>
-    <p class="lede">An AST-based obfuscator that hides your source where it's free to hide — folding numbers at compile time, decrypting strings once at load, renaming locals — so the hot path runs exactly as fast as before.</p>
-    <div class="badges">
-      <span class="badge"><span class="dot"></span><b>100% in your browser</b></span>
-      <span class="badge">No account</span>
-      <span class="badge">No upload — code never leaves this tab</span>
-      <span class="badge">balanced ≈ <b>98%</b> of original runtime</span>
+<div class="page">
+  <header>
+    <div>
+      <h1>DeepLuaU</h1>
+      <p class="tag">A Luau obfuscator that runs entirely in your browser. Your code is never uploaded.</p>
     </div>
-  </section>
+    <div class="head-actions">
+      <button class="btn ghost" id="theme" aria-label="Toggle theme" title="Toggle theme">Theme</button>
+      <a class="btn" href="https://github.com/Disortion/DeepLuaU" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </header>
 
-  <section class="panel work" aria-label="Obfuscator">
-    <div class="toolbar">
-      <div class="field">
+  <section class="tool" aria-label="Obfuscator">
+    <div class="controls">
+      <div class="ctl">
         <label>Profile</label>
         <div class="seg" id="profile" role="group" aria-label="Profile">
           <button data-p="none">none</button>
@@ -208,117 +154,107 @@ footer .mono{font-family:var(--mono)}
           <button data-p="max">max</button>
         </div>
       </div>
-      <div class="field">
+      <div class="ctl">
         <label for="seed">Seed</label>
-        <div class="ctrl">
+        <div class="row">
           <input type="number" id="seed" value="1337" min="0" step="1">
-          <button class="mini" id="dice" title="Random seed">⟳ random</button>
+          <button class="link" id="dice">random</button>
         </div>
       </div>
-      <div class="field">
+      <div class="ctl">
         <label for="example">Example</label>
         <select id="example">
           <option value="vector">Vector math (OOP)</option>
           <option value="roblox">Roblox script</option>
-          <option value="loop">Hot loop + strings</option>
+          <option value="interp">String interpolation</option>
+          <option value="loop">Hot loop</option>
         </select>
       </div>
       <span class="spacer"></span>
-      <div class="field">
-        <label>Runtime cost</label>
-        <div class="cost"><span class="dot" id="costdot"></span><b id="cost">near-zero</b></div>
+      <div class="ctl">
+        <label>&nbsp;</label>
+        <button class="btn" id="import">Import file…</button>
+        <input type="file" id="file" accept=".lua,.luau,.txt,text/plain" hidden>
       </div>
     </div>
-    <div class="panes">
-      <div class="pane">
-        <div class="pane-head"><h2>Input · Luau</h2><span class="spacer"></span>
-          <button class="mini" id="clear">clear</button></div>
+
+    <div class="io">
+      <div class="col">
+        <div class="col-head">
+          <h2>Input</h2><span class="ext">.lua · .luau · .txt · or drop a file</span>
+          <span class="spacer"></span>
+          <button class="mini" id="clear">clear</button>
+        </div>
         <textarea id="in" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Luau source input"></textarea>
       </div>
-      <div class="pane">
-        <div class="pane-head"><h2>Output · protected</h2><span class="spacer"></span>
-          <button class="mini" id="copy">copy</button></div>
+      <div class="col">
+        <div class="col-head">
+          <h2>Output</h2>
+          <span class="spacer"></span>
+          <button class="mini" id="copy">copy</button>
+        </div>
         <textarea id="out" readonly spellcheck="false" aria-label="Obfuscated output"></textarea>
       </div>
     </div>
-    <div class="statbar">
-      <div class="s"><span>in</span> <b id="st-in">0</b> B</div>
-      <div class="s"><span>out</span> <b id="st-out">0</b> B</div>
-      <div class="s"><span>size</span> <b id="st-ratio">—</b></div>
-      <div class="s"><span>strings pooled</span> <b id="st-str">0</b></div>
-      <div class="s"><span>time</span> <b id="st-time">0</b> ms</div>
+
+    <div class="stats">
+      <span><b id="st-in">0</b> B in</span>
+      <span><b id="st-out">0</b> B out</span>
+      <span><b id="st-ratio">—</b> size</span>
+      <span><b id="st-time">0</b> ms</span>
+      <span id="st-cost" class="cost-ok">runtime cost <b>near-zero</b></span>
     </div>
   </section>
 
-  <section class="block">
-    <p class="kicker">Why it's fast</p>
-    <h3>Obfuscate where it costs nothing</h3>
-    <p class="sub">The one technique that's genuinely hard to reverse — a custom bytecode VM — is also the one that runs 10–100× slower. That's the wrong trade for code in a render loop. DeepLuaU pushes the work into forms the Luau compiler erases or that run only once.</p>
-    <div class="cards">
-      <div class="card">
-        <h4>Numbers <span class="tag">free</span></h4>
-        <p>Every integer becomes arithmetic like <code style="font-family:var(--mono)">((0xD-9)+(0xB-5))</code>. Luau constant-folds it at compile time, so the bytecode is identical to the plain literal.</p>
-      </div>
-      <div class="card">
-        <h4>Strings <span class="tag">load once</span></h4>
-        <p>All strings are encrypted into one pool and decrypted a single time at load. Each use becomes one table index — no per-call, no per-frame decryption.</p>
-      </div>
-      <div class="card">
-        <h4>Names <span class="tag">free</span></h4>
-        <p>Locals are renamed to lookalike <code style="font-family:var(--mono)">I l i j _</code> soup. It's purely lexical: the compiled bytecode is unchanged apart from debug names.</p>
-      </div>
-    </div>
-    <div class="proof">
-      <code>((0xD-9)+(0xB-5))</code>
-      <span class="arrow">compiles to →</span>
-      <code>LOADN R1 10</code>
-      <p>The same instruction a bare <code style="font-family:var(--mono)">10</code> produces. Verified with <code style="font-family:var(--mono)">luau-compile -O2</code>. The real constant never appears in the shipped source.</p>
+  <section class="ref">
+    <h3>Why it stays fast</h3>
+    <p class="lead">The only technique that is genuinely hard to reverse — a bytecode VM — also runs 10–100× slower. DeepLuaU avoids it and hides your code in forms the Luau compiler erases or that run only once.</p>
+    <div class="points">
+      <div class="point"><h4>Numbers fold away</h4><p>Integers become arithmetic like <code>((0xD-9)+(0xB-5))</code>. Luau constant-folds it to the same bytecode as the literal <code>10</code>.</p></div>
+      <div class="point"><h4>Strings decrypt once</h4><p>All strings go into one encrypted pool, decrypted a single time at load. Each use is then one table lookup — nothing per frame.</p></div>
+      <div class="point"><h4>Names are lexical</h4><p>Locals are renamed to lookalike identifiers. It changes only debug names; the compiled bytecode is otherwise identical.</p></div>
     </div>
   </section>
 
-  <section class="block">
-    <p class="kicker">Profiles</p>
-    <h3>Pick by where the code runs</h3>
+  <section class="ref">
+    <h3>Profiles</h3>
     <div class="tablewrap">
       <table>
-        <thead><tr><th>Profile</th><th>Passes</th><th>Runtime cost</th><th>Use for</th></tr></thead>
+        <thead><tr><th>Profile</th><th>Adds</th><th>Runtime cost</th><th>Use for</th></tr></thead>
         <tbody>
-          <tr><td><code>none</code></td><td>minify</td><td><span class="pill none">none</span></td><td>baseline / debugging</td></tr>
-          <tr><td><code>light</code></td><td>+ rename locals</td><td><span class="pill none">none</span></td><td>anything, including hot loops</td></tr>
-          <tr><td><code>balanced</code></td><td>+ string encryption + number folding</td><td><span class="pill low">near-zero</span></td><td class="eff"><b>default</b> — game clients, render-loop code</td></tr>
-          <tr><td><code>max</code></td><td>+ control-flow flattening</td><td><span class="pill some">small per-call</span></td><td>cold / non-hot modules</td></tr>
+          <tr><td><code>none</code></td><td>minify</td><td class="eff n">none</td><td>baseline / debugging</td></tr>
+          <tr><td><code>light</code></td><td>rename locals</td><td class="eff n">none</td><td>anything, incl. hot loops</td></tr>
+          <tr><td><code>balanced</code></td><td>strings + numbers</td><td class="eff n">near-zero</td><td>default — render-loop code</td></tr>
+          <tr><td><code>max</code></td><td>control-flow flattening</td><td class="eff s">small per-call</td><td>cold / non-hot modules</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
-  <section class="block">
-    <p class="kicker">Straight talk</p>
-    <h3>What it stops — and what it doesn't</h3>
-    <p class="sub">No obfuscator is unbreakable: code that runs on a machine you don't control can be observed. DeepLuaU raises the cost of reading your source. Here's exactly how each layer comes apart, so you know what you're buying.</p>
+  <section class="ref">
+    <h3>What it does not stop</h3>
+    <p class="lead">No obfuscator is unbreakable: code that runs on a machine you don't control can be observed. This raises the cost of reading your source — here is how each layer comes apart.</p>
     <div class="tablewrap">
       <table>
-        <thead><tr><th>Layer</th><th>How it's undone</th><th>Effort</th><th>What they need</th></tr></thead>
+        <thead><tr><th>Layer</th><th>How it's undone</th><th>Effort</th></tr></thead>
         <tbody>
-          <tr><td>Minification</td><td>Run any beautifier / AST round-trip</td><td><span class="pill none">seconds</span></td><td>A formatter</td></tr>
-          <tr><td>Number folding</td><td>It's constant arithmetic — fold it; <code>luau-compile</code> already does</td><td><span class="pill none">seconds</span></td><td>The Luau compiler</td></tr>
-          <tr><td>Local renaming</td><td>Original names are gone for good; a scope pass assigns fresh readable ones</td><td><span class="pill low">minutes</span></td><td>A Luau parser + scope analysis</td></tr>
-          <tr><td>String encryption</td><td>Run it and dump the pool, or extract the embedded decoder and re-run it</td><td><span class="pill low">minutes</span></td><td>To run it, or read the decoder</td></tr>
-          <tr><td>Control-flow flattening</td><td>Trace the state transitions, or a static deflattener rebuilds the order</td><td><span class="pill some">moderate</span></td><td>A tracer / symbolic execution</td></tr>
-          <tr><td>All source layers</td><td>Dump compiled bytecode and decompile — sidesteps source entirely</td><td><span class="pill some">moderate</span></td><td>A Luau bytecode decompiler</td></tr>
+          <tr><td>Minify</td><td>Run any beautifier</td><td class="eff">seconds</td></tr>
+          <tr><td>Numbers</td><td>Constant-fold; <code>luau-compile</code> already does</td><td class="eff">seconds</td></tr>
+          <tr><td>Renaming</td><td>Original names are gone; a scope pass gives fresh ones</td><td class="eff">minutes</td></tr>
+          <tr><td>Strings</td><td>Run it and dump the pool, or re-run the embedded decoder</td><td class="eff">minutes</td></tr>
+          <tr><td>Flattening</td><td>Trace the state machine, or a static deflattener</td><td class="eff s">moderate</td></tr>
+          <tr><td>All of it</td><td>Dump and decompile the compiled bytecode</td><td class="eff s">moderate</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="note"><b>Gone for good, for everyone:</b> original variable names, comments and type annotations are deleted, not hidden — even a full deobfuscation yields equivalent code, never your original source. <b>The rule that still matters most:</b> never ship secrets or server-trusted logic in client code, obfuscated or not. Keep authority on the server.</p>
+    <p class="callout"><b>Gone for everyone:</b> original names, comments and type annotations are deleted, not hidden. <b>Still true:</b> never ship secrets or server-trusted logic in client code — keep authority on the server.</p>
   </section>
-</main>
 
-<footer>
-  <div class="wrap">
-    <span>Runs entirely client-side · your code is never uploaded.</span>
-    <span class="mono"><a href="https://github.com/Disortion/DeepLuaU" target="_blank" rel="noopener">github.com/Disortion/DeepLuaU</a></span>
-  </div>
-</footer>
+  <footer>
+    <span>Runs client-side · no account · no upload.</span>
+    <span><a href="https://github.com/Disortion/DeepLuaU" target="_blank" rel="noopener">github.com/Disortion/DeepLuaU</a></span>
+  </footer>
+</div>
 
 <script>
 /*__DEEPLUAU_JS__*/
@@ -328,135 +264,140 @@ footer .mono{font-family:var(--mono)}
 (function(){
   "use strict";
   var $=function(s){return document.querySelector(s)};
-  var inEl=$("#in"), outEl=$("#out"), seedEl=$("#seed"), exEl=$("#example");
-  var stIn=$("#st-in"), stOut=$("#st-out"), stRatio=$("#st-ratio"), stStr=$("#st-str"), stTime=$("#st-time");
-  var costEl=$("#cost"), costDot=$("#costdot");
+  var inEl=$("#in"), outEl=$("#out"), seedEl=$("#seed"), exEl=$("#example"), fileEl=$("#file");
+  var stIn=$("#st-in"), stOut=$("#st-out"), stRatio=$("#st-ratio"), stTime=$("#st-time"), stCost=$("#st-cost");
   var profile="balanced";
-
-  var COST={
-    none:{t:"load-time only",c:"var(--green)"},
-    light:{t:"zero",c:"var(--green)"},
-    balanced:{t:"near-zero",c:"var(--accent)"},
-    max:{t:"small per-call",c:"var(--amber)"}
-  };
+  var COST={none:["load-time only","ok"],light:["zero","ok"],balanced:["near-zero","ok"],max:["small per-call","warn"]};
 
   var EXAMPLES={
 vector:
-'--!strict\\n'+
-'-- 2D vector with a metatable\\n'+
-'local Vec = {}\\n'+
-'Vec.__index = Vec\\n\\n'+
-'function Vec.new(x: number, y: number)\\n'+
-'\\treturn setmetatable({ x = x, y = y }, Vec)\\n'+
-'end\\n\\n'+
-'function Vec:length(): number\\n'+
-'\\treturn math.sqrt(self.x * self.x + self.y * self.y)\\n'+
-'end\\n\\n'+
-'function Vec:scale(k: number)\\n'+
-'\\treturn Vec.new(self.x * k, self.y * k)\\n'+
-'end\\n\\n'+
-'local v = Vec.new(3, 4):scale(2)\\n'+
-'print("length is " .. tostring(v:length()))\\n',
+'--!strict\n'+
+'-- 2D vector with a metatable\n'+
+'local Vec = {}\n'+
+'Vec.__index = Vec\n\n'+
+'function Vec.new(x: number, y: number)\n'+
+'\treturn setmetatable({ x = x, y = y }, Vec)\n'+
+'end\n\n'+
+'function Vec:length(): number\n'+
+'\treturn math.sqrt(self.x * self.x + self.y * self.y)\n'+
+'end\n\n'+
+'function Vec:scale(k: number)\n'+
+'\treturn Vec.new(self.x * k, self.y * k)\n'+
+'end\n\n'+
+'local v = Vec.new(3, 4):scale(2)\n'+
+'print("length is " .. tostring(v:length()))\n',
 roblox:
-'local Players = game:GetService("Players")\\n'+
-'local RunService = game:GetService("RunService")\\n'+
-'local part = workspace:FindFirstChild("Brick")\\n\\n'+
-'local SPEED = 5\\n'+
-'local function onHeartbeat(dt: number)\\n'+
-'\\tlocal player = Players.LocalPlayer\\n'+
-'\\tif player and part then\\n'+
-'\\t\\tpart.Position = part.Position + Vector3.new(0, dt * SPEED, 0)\\n'+
-'\\tend\\n'+
-'end\\n\\n'+
-'RunService.Heartbeat:Connect(onHeartbeat)\\n'+
-'print(("ready"):upper())\\n',
+'local Players = game:GetService("Players")\n'+
+'local RunService = game:GetService("RunService")\n'+
+'local part = workspace:FindFirstChild("Brick")\n\n'+
+'local SPEED = 5\n'+
+'local function onHeartbeat(dt: number)\n'+
+'\tlocal player = Players.LocalPlayer\n'+
+'\tif player and part then\n'+
+'\t\tpart.Position = part.Position + Vector3.new(0, dt * SPEED, 0)\n'+
+'\tend\n'+
+'end\n\n'+
+'RunService.Heartbeat:Connect(onHeartbeat)\n'+
+'print(("ready"):upper())\n',
+interp:
+'local player = "Nova"\n'+
+'local items = { "sword", "shield", "potion" }\n'+
+'local hp, max = 30, 100\n\n'+
+'print(`Welcome, {player}!`)\n'+
+'print(`You carry {#items} items: {table.concat(items, ", ")}`)\n'+
+'print(`HP {hp}/{max} = {math.floor(hp / max * 100)}%`)\n',
 loop:
-'-- a hot loop: numbers fold, the string is pooled once\\n'+
-'local total = 0\\n'+
-'local label = "tick #"\\n'+
-'for i = 1, 1000 do\\n'+
-'\\tlocal x = (i * 3 + 7) % 101\\n'+
-'\\ttotal += math.floor(math.sqrt(x * x + i))\\n'+
-'\\tif x == 0 then\\n'+
-'\\t\\tprint(label .. tostring(i))\\n'+
-'\\tend\\n'+
-'end\\n'+
-'print("total:", total)\\n'
+'-- numbers fold, the string is pooled once\n'+
+'local total = 0\n'+
+'local label = "tick #"\n'+
+'for i = 1, 1000 do\n'+
+'\tlocal x = (i * 3 + 7) % 101\n'+
+'\ttotal += math.floor(math.sqrt(x * x + i))\n'+
+'\tif x == 0 then\n'+
+'\t\tprint(label .. tostring(i))\n'+
+'\tend\n'+
+'end\n'+
+'print("total:", total)\n'
   };
 
   function setProfile(p){
     profile=p;
     document.querySelectorAll("#profile button").forEach(function(b){
-      b.setAttribute("aria-pressed", b.dataset.p===p ? "true":"false");
+      b.setAttribute("aria-pressed", b.dataset.p===p?"true":"false");
     });
-    var c=COST[p]; costEl.textContent=c.t; costDot.style.background=c.c;
     run();
   }
   function fmt(n){ return n.toLocaleString("en-US"); }
-
   var timer=null;
   function schedule(){ if(timer)clearTimeout(timer); timer=setTimeout(run,140); }
 
   function run(){
     var src=inEl.value;
     var seed=parseInt(seedEl.value,10); if(isNaN(seed))seed=undefined;
-    var t0=performance.now();
-    var result, ok=true;
+    var t0=performance.now(), result, ok=true;
     try{ result=DeepLuaU.obfuscate(src,{profile:profile,seed:seed}); }
-    catch(e){ ok=false; result="-- could not obfuscate:\\n-- "+String(e.message||e); }
+    catch(e){ ok=false; result="-- could not obfuscate:\n-- "+String(e&&e.message||e); }
     var t1=performance.now();
-    outEl.value=result;
-    outEl.classList.toggle("err",!ok);
+    outEl.value=result; outEl.classList.toggle("err",!ok);
     stIn.textContent=fmt(src.length);
+    stTime.textContent=(t1-t0).toFixed(1);
     if(ok){
       stOut.textContent=fmt(result.length);
-      var pct=src.length? Math.round(result.length/src.length*100):0;
+      var pct=src.length?Math.round(result.length/src.length*100):0;
       stRatio.textContent=pct+"%";
-      stRatio.className=pct>100?"grow":(pct<100?"shrink":"");
-      // count pooled strings by probing the AST path indirectly: parse + strings
-      var sc=0;
-      try{
-        if(profile==="balanced"||profile==="max"){
-          var m=result.match(/local p=\\{([^}]*)\\}/);
-          if(m){ sc=m[1].split(",").filter(function(x){return x.trim()!==""}).length; }
-        }
-      }catch(_){}
-      stStr.textContent=fmt(sc);
-      stTime.textContent=(t1-t0).toFixed(1);
-    } else {
-      stOut.textContent="—"; stRatio.textContent="—"; stRatio.className="";
-      stStr.textContent="0"; stTime.textContent=(t1-t0).toFixed(1);
-    }
+    } else { stOut.textContent="—"; stRatio.textContent="—"; }
+    var c=COST[profile];
+    stCost.innerHTML="runtime cost <b>"+c[0]+"</b>";
+    stCost.className=c[1]==="ok"?"cost-ok":"cost-warn";
   }
 
-  // wire controls
+  function loadFile(file){
+    if(!file) return;
+    var r=new FileReader();
+    r.onload=function(){ inEl.value=String(r.result||""); exEl.selectedIndex=-1; run(); };
+    r.onerror=function(){ outEl.value="-- could not read file: "+file.name; };
+    r.readAsText(file);
+  }
+
+  // controls
   document.querySelectorAll("#profile button").forEach(function(b){
     b.addEventListener("click",function(){ setProfile(b.dataset.p); });
   });
   seedEl.addEventListener("input",schedule);
-  inEl.addEventListener("input",schedule);
+  inEl.addEventListener("input",function(){ exEl.selectedIndex=-1; schedule(); });
   $("#dice").addEventListener("click",function(){ seedEl.value=Math.floor(Math.random()*100000); run(); });
   $("#clear").addEventListener("click",function(){ inEl.value=""; run(); inEl.focus(); });
   exEl.addEventListener("change",function(){ inEl.value=EXAMPLES[exEl.value]||""; run(); });
-  $("#copy").addEventListener("click",function(){
-    var btn=this;
-    function done(){ var o=btn.textContent; btn.textContent="copied ✓"; setTimeout(function(){btn.textContent=o;},1200); }
-    try{
-      navigator.clipboard.writeText(outEl.value).then(done,function(){ outEl.select(); done(); });
-    }catch(e){ outEl.select(); done(); }
+  $("#import").addEventListener("click",function(){ fileEl.click(); });
+  fileEl.addEventListener("change",function(){ loadFile(fileEl.files&&fileEl.files[0]); fileEl.value=""; });
+
+  // drag & drop onto the input
+  ["dragenter","dragover"].forEach(function(ev){
+    inEl.addEventListener(ev,function(e){ e.preventDefault(); inEl.classList.add("drop"); });
+  });
+  ["dragleave","dragend","drop"].forEach(function(ev){
+    inEl.addEventListener(ev,function(e){ e.preventDefault(); inEl.classList.remove("drop"); });
+  });
+  inEl.addEventListener("drop",function(e){
+    var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];
+    if(f) loadFile(f);
   });
 
-  // theme toggle
+  // copy
+  $("#copy").addEventListener("click",function(){
+    var btn=this, done=function(){ var o=btn.textContent; btn.textContent="copied"; setTimeout(function(){btn.textContent=o;},1100); };
+    try{ navigator.clipboard.writeText(outEl.value).then(done,function(){ outEl.select(); done(); }); }
+    catch(e){ outEl.select(); done(); }
+  });
+
+  // theme
   var themeBtn=$("#theme");
   function stored(){ try{ return localStorage.getItem("dlu-theme"); }catch(e){ return null; } }
-  function currentMode(){
-    var attr=document.documentElement.getAttribute("data-theme");
-    if(attr) return attr;
-    return window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";
-  }
-  (function initTheme(){ var s=stored(); if(s)document.documentElement.setAttribute("data-theme",s); })();
+  function mode(){ var a=document.documentElement.getAttribute("data-theme"); if(a)return a;
+    return (window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light"; }
+  (function(){ var s=stored(); if(s)document.documentElement.setAttribute("data-theme",s); })();
   themeBtn.addEventListener("click",function(){
-    var next=currentMode()==="dark"?"light":"dark";
+    var next=mode()==="dark"?"light":"dark";
     document.documentElement.setAttribute("data-theme",next);
     try{ localStorage.setItem("dlu-theme",next); }catch(e){}
   });
