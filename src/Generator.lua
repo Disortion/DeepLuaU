@@ -135,6 +135,18 @@ function Generator:emitExpr(node)
 		end
 		self:emit("else")
 		self:emitExpr(node.elseExpr)
+	elseif k == "InterpString" then
+		local s = "`"
+		for _, part in ipairs(node.parts) do
+			if part.t == "str" then
+				s = s .. part.value
+			else
+				local g = Generator.new()
+				g:emitExpr(part.expr)
+				s = s .. "{ " .. g:result() .. " }" -- padded: Luau forbids {{ and }}
+			end
+		end
+		self:emit(s .. "`", "String")
 	else
 		error("Generator: unknown expr kind " .. tostring(k))
 	end

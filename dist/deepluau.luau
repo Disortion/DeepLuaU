@@ -351,6 +351,32 @@ function Parser.new(source)
 	return setmetatable({ tokens = tokens, pos = 1 }, Parser)
 end
 
+-- helpers for splitting interpolated-string bodies: skip a nested string / backtick
+-- so a brace inside it is not mistaken for an interpolation delimiter
+local function skipStr(raw, j, quote)
+	j = j + 1
+	while j <= #raw do
+		local c = raw:sub(j, j)
+		if c == "\\" then j = j + 2
+		elseif c == quote then return j + 1
+		else j = j + 1 end
+	end
+	return j
+end
+local function skipTick(raw, j)
+	j = j + 1
+	local depth = 0
+	while j <= #raw do
+		local c = raw:sub(j, j)
+		if c == "\\" then j = j + 2
+		elseif c == "{" then depth = depth + 1; j = j + 1
+		elseif c == "}" then if depth > 0 then depth = depth - 1 end; j = j + 1
+		elseif c == "`" and depth == 0 then return j + 1
+		else j = j + 1 end
+	end
+	return j
+end
+
 function Parser:error(msg)
 	local t = self.tokens[self.pos]
 	error(("DeepLuaU parse error (line %s): %s (got %s %s)"):format(
@@ -808,7 +834,7 @@ function Parser:parseSimpleExpr()
 		return { kind = "Number", raw = self:next().value }
 	end
 	if self:check("String") then
-		return { kind = "String", str = self:next().value }
+		return self:parseStringToken()
 	end
 	if self:isKw("nil") then self:next(); return { kind = "Nil" } end
 	if self:isKw("true") then self:next(); return { kind = "True" } end
@@ -861,9 +887,58 @@ function Parser:parseSuffixedExpr()
 	return e
 end
 
+function Parser:parseStringToken()
+	local tok = self:next()
+	if tok.value.kind == "interp" then
+		return self:parseInterp(tok.value.value)
+	end
+	return { kind = "String", str = tok.value }
+end
+
+-- parse a backtick interpolated-string body into literal parts + expression ASTs
+function Parser:parseInterp(raw)
+	local parts = {}
+	local lit = {}
+	local i = 1
+	local n = #raw
+	local function flush()
+		if #lit > 0 then parts[#parts + 1] = { t = "str", value = table.concat(lit) }; lit = {} end
+	end
+	while i <= n do
+		local c = raw:sub(i, i)
+		if c == "\\" then
+			lit[#lit + 1] = raw:sub(i, i + 1); i = i + 2
+		elseif c == "{" then
+			flush()
+			local j = i + 1
+			local depth = 1
+			local start = j
+			while j <= n and depth > 0 do
+				local ch = raw:sub(j, j)
+				if ch == "\\" then j = j + 2
+				elseif ch == '"' or ch == "'" then j = skipStr(raw, j, ch)
+				elseif ch == "`" then j = skipTick(raw, j)
+				elseif ch == "{" then depth = depth + 1; j = j + 1
+				elseif ch == "}" then depth = depth - 1; if depth == 0 then break end; j = j + 1
+				else j = j + 1 end
+			end
+			local exprSrc = raw:sub(start, j - 1)
+			local p = Parser.new(exprSrc)
+			local e = p:parseExpr()
+			if not p:check("EOF") then p:error("unexpected token in interpolation") end
+			parts[#parts + 1] = { t = "expr", expr = e }
+			i = j + 1
+		else
+			lit[#lit + 1] = c; i = i + 1
+		end
+	end
+	flush()
+	return { kind = "InterpString", parts = parts }
+end
+
 function Parser:parseCallArgs()
 	if self:check("String") then
-		return { { kind = "String", str = self:next().value } }
+		return { self:parseStringToken() }
 	end
 	if self:isSym("{") then
 		return { self:parseTable() }
@@ -1047,6 +1122,18 @@ function Generator:emitExpr(node)
 		end
 		self:emit("else")
 		self:emitExpr(node.elseExpr)
+	elseif k == "InterpString" then
+		local s = "`"
+		for _, part in ipairs(node.parts) do
+			if part.t == "str" then
+				s = s .. part.value
+			else
+				local g = Generator.new()
+				g:emitExpr(part.expr)
+				s = s .. "{ " .. g:result() .. " }" -- padded: Luau forbids {{ and }}
+			end
+		end
+		self:emit(s .. "`", "String")
 	else
 		error("Generator: unknown expr kind " .. tostring(k))
 	end
@@ -1305,6 +1392,10 @@ function Resolver:expr(node)
 	elseif k == "IfExpr" then
 		for _, c in ipairs(node.clauses) do self:expr(c.cond); self:expr(c.value) end
 		self:expr(node.elseExpr)
+	elseif k == "InterpString" then
+		for _, part in ipairs(node.parts) do
+			if part.t == "expr" then self:expr(part.expr) end
+		end
 	end
 	-- literals / VarArg: nothing
 end

@@ -158,6 +158,11 @@
   const COMPOUND = {"+=":"+","-=":"-","*=":"*","/=":"/","//=":"//","%=":"%","^=":"^","..=":".."};
   const CLOSE_OF = {"(":")","{":"}","[":"]"};
 
+  // helpers for splitting interpolated-string bodies: skip over a nested string
+  // / backtick so a brace inside it is not mistaken for an interpolation delimiter
+  function skipStr(raw, j, quote){ j++; while(j<raw.length){ const c=raw[j]; if(c==="\\"){ j+=2; continue; } if(c===quote) return j+1; j++; } return j; }
+  function skipTick(raw, j){ j++; let depth=0; while(j<raw.length){ const c=raw[j]; if(c==="\\"){ j+=2; continue; } if(c==="{"){depth++;j++;continue;} if(c==="}"){ if(depth>0)depth--; j++; continue; } if(c==="`"&&depth===0) return j+1; j++; } return j; }
+
   function Parser(src){ this.tokens=new Lexer(src).tokenize(); this.pos=0; }
   Parser.prototype.error = function (m){
     const t=this.tokens[this.pos];
@@ -400,7 +405,7 @@
   };
   Parser.prototype.parseSimpleExpr = function (){
     if (this.check("Number")) return { kind:"Number", raw:this.nextTok().value };
-    if (this.check("String")) return { kind:"String", str:this.nextTok().value };
+    if (this.check("String")) return this.parseStringToken();
     if (this.isKw("nil")){ this.nextTok(); return {kind:"Nil"}; }
     if (this.isKw("true")){ this.nextTok(); return {kind:"True"}; }
     if (this.isKw("false")){ this.nextTok(); return {kind:"False"}; }
@@ -425,8 +430,43 @@
     }
     return e;
   };
+  Parser.prototype.parseStringToken = function (){
+    const tok=this.nextTok();
+    if (tok.value.kind==="interp") return this.parseInterp(tok.value.value);
+    return { kind:"String", str:tok.value };
+  };
+  Parser.prototype.parseInterp = function (raw){
+    const parts=[]; let lit=""; let i=0; const n=raw.length;
+    const flush=()=>{ if(lit!==""){ parts.push({t:"str",value:lit}); lit=""; } };
+    while (i<n){
+      const c=raw[i];
+      if (c==="\\"){ lit+=raw[i]+(i+1<n?raw[i+1]:""); i+=2; continue; }
+      if (c==="{"){
+        flush();
+        let j=i+1, depth=1; const start=j;
+        while (j<n && depth>0){
+          const ch=raw[j];
+          if (ch==="\\"){ j+=2; continue; }
+          if (ch==='"'||ch==="'"){ j=skipStr(raw,j,ch); continue; }
+          if (ch==="`"){ j=skipTick(raw,j); continue; }
+          if (ch==="{"){ depth++; j++; continue; }
+          if (ch==="}"){ depth--; if(depth===0) break; j++; continue; }
+          j++;
+        }
+        const exprSrc=raw.substring(start,j);
+        const p=new Parser(exprSrc);
+        const e=p.parseExpr();
+        if (!p.check("EOF")) p.error("unexpected token in interpolation");
+        parts.push({ t:"expr", expr:e });
+        i=j+1; continue;
+      }
+      lit+=c; i++;
+    }
+    flush();
+    return { kind:"InterpString", parts };
+  };
   Parser.prototype.parseCallArgs = function (){
-    if (this.check("String")) return [{ kind:"String", str:this.nextTok().value }];
+    if (this.check("String")) return [this.parseStringToken()];
     if (this.isSym("{")) return [this.parseTable()];
     this.expect("Symbol","(");
     let args=[];
@@ -500,6 +540,15 @@
       node.clauses.forEach((c,i)=>{ this.emit(i===0?"if":"elseif"); this.emitExpr(c.cond); this.emit("then"); this.emitExpr(c.value); });
       this.emit("else"); this.emitExpr(node.elseExpr);
     }
+    else if (k==="InterpString"){
+      let s="`";
+      for (const part of node.parts){
+        if (part.t==="str") s+=part.value;
+        else s+="{ "+generateExpr(part.expr)+" }"; // padded: Luau forbids {{ and }}
+      }
+      s+="`";
+      this.emit(s,"String");
+    }
     else throw new Error("Generator: unknown expr kind "+k);
   };
   Generator.prototype.emitArgs = function (args){
@@ -560,6 +609,7 @@
     else throw new Error("Generator: unknown stat kind "+k);
   };
   function generate(ast){ const g=new Generator(); g.emitBlock(ast); return g.result(); }
+  function generateExpr(node){ const g=new Generator(); g.emitExpr(node); return g.result(); }
 
   // ---------------------------------------------------------------- Scope / rename
   const ALPH = ["l","I","i","j","_"]; const BASE = ALPH.length;
@@ -590,6 +640,7 @@
     else if (k==="Function") this.func(node);
     else if (k==="Table"){ for(const f of node.fields){ if(f.type==="rec")this.expr(f.key); this.expr(f.value); } }
     else if (k==="IfExpr"){ for(const c of node.clauses){ this.expr(c.cond); this.expr(c.value); } this.expr(node.elseExpr); }
+    else if (k==="InterpString"){ for(const part of node.parts){ if(part.t==="expr") this.expr(part.expr); } }
   };
   Resolver.prototype.exprList=function(list){ for(const e of list) this.expr(e); };
   Resolver.prototype.func=function(node){

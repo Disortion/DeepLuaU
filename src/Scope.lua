@@ -87,6 +87,10 @@ function Resolver:expr(node)
 	elseif k == "IfExpr" then
 		for _, c in ipairs(node.clauses) do self:expr(c.cond); self:expr(c.value) end
 		self:expr(node.elseExpr)
+	elseif k == "InterpString" then
+		for _, part in ipairs(node.parts) do
+			if part.t == "expr" then self:expr(part.expr) end
+		end
 	end
 	-- literals / VarArg: nothing
 end
