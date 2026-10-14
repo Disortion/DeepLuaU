@@ -57,8 +57,11 @@ header .tag{color:var(--muted);font-size:14px;margin-top:3px}
   align-items:center;gap:7px;line-height:1}
 .btn:hover{border-color:var(--accent);text-decoration:none}
 .btn.ghost{background:transparent}
-.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-.ctl > label.btn{font-size:13px;text-transform:none;letter-spacing:0;color:var(--fg)}
+/* the real <input type=file> sits transparently over the button so the tap/click
+   lands directly on the input — the reliable pattern in sandboxed iframes and on
+   Android webviews, where a forwarded .click() or a hidden-input label does not open the picker */
+.filebtn{position:relative;overflow:hidden}
+.filebtn input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
 
 /* tool */
 .tool{border:1px solid var(--border);border-radius:12px;background:var(--surface);overflow:hidden}
@@ -175,8 +178,9 @@ footer{padding-block:32px 44px;margin-top:36px;border-top:1px solid var(--border
       <span class="spacer"></span>
       <div class="ctl">
         <label>&nbsp;</label>
-        <label class="btn" for="file">Import file…</label>
-        <input type="file" id="file" class="sr-only" accept=".lua,.luau,.txt,text/plain">
+        <span class="btn filebtn">Import file…
+          <input type="file" id="file" aria-label="Import a .lua, .luau or .txt file">
+        </span>
       </div>
     </div>
 
