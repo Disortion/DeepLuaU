@@ -803,28 +803,110 @@
   }
   function stringsRun(ast, ctx){
     const seed=ctx.seed>>>0; const poolName=ctx.poolName;
-    const values=[]; const indexOf=new Map(); const byteCache=[];
-    const visited=new Set();
-    function collect(node){
-      const bytes=realBytes(node.str);
-      if (bytes===null) return null;
+    const hideMembers=!!ctx.members;
+    const values=[]; const indexOf=new Map();
+    function slotFor(bytes){
       const key=bytes.join(",");
       let idx=indexOf.get(key);
       if (idx===undefined){ values.push(bytes); idx=values.length; indexOf.set(key,idx); }
       return idx;
     }
-    function walk(node){
-      if (typeof node!=="object"||node===null||visited.has(node)) return;
-      visited.add(node);
-      if (node.kind==="Raw") return;
-      if (node.kind==="String"){
-        const idx=collect(node);
-        if (idx){ node.kind="Index"; node.obj={kind:"Name",name:poolName}; node.index={kind:"Number",raw:String(idx)}; delete node.str; }
-        return;
-      }
-      for (const key in node){ const child=node[key]; if (typeof child==="object"&&child!==null&&key!=="str"){ if(Array.isArray(child)){ for(const c of child) walk(c); } else walk(child); } }
+    // pool[i] node for a byte sequence
+    function pool(bytes){
+      return { kind:"Index", obj:{kind:"Name",name:poolName}, index:{kind:"Number",raw:String(slotFor(bytes))} };
     }
-    for (const s of ast.stats) walk(s);
+
+    // recursive transform: replaces strings & interpolation (always), and member
+    // names via bracket indexing when hideMembers is on
+    function tx(node){
+      if (node===null || typeof node!=="object") return node;
+      switch (node.kind){
+        case undefined: return node;
+        case "Raw": return node;
+
+        case "String": {
+          const b=realBytes(node.str);
+          if (b!==null){ node.kind="Index"; node.obj={kind:"Name",name:poolName};
+            node.index={kind:"Number",raw:String(slotFor(b))}; delete node.str; }
+          return node;
+        }
+
+        case "InterpString": {
+          // `lit1{e1}lit2` -> (pool[a] .. tostring(e1) .. pool[b])
+          const ops=[];
+          for (const part of node.parts){
+            if (part.t==="str"){ const b=shortToBytes(part.value); if (b.length>0) ops.push(pool(b)); }
+            else ops.push({ kind:"Call", func:{kind:"Name",name:"tostring"}, args:[tx(part.expr)] });
+          }
+          let expr;
+          if (ops.length===0) expr=pool([]);
+          else { expr=ops[0]; for (let i=1;i<ops.length;i++) expr={kind:"Binop",op:"..",lhs:expr,rhs:ops[i]}; }
+          for (const k in node) delete node[k];
+          node.kind="Paren"; node.expr=expr;
+          return node;
+        }
+
+        case "Field": {
+          node.obj=tx(node.obj);
+          if (hideMembers){ const idx=pool(strToBytes(node.name)); node.kind="Index"; node.index=idx; delete node.name; }
+          return node;
+        }
+
+        case "MethodCall": {
+          node.obj=tx(node.obj);
+          node.args=node.args.map(tx);
+          // only rewrite when the receiver is a bare Name, so evaluating it twice
+          // (recv[M](recv, ...)) has no observable effect
+          if (hideMembers && node.obj.kind==="Name"){
+            const nm=node.obj.name;
+            node.kind="Call";
+            node.func={ kind:"Index", obj:{kind:"Name",name:nm}, index:pool(strToBytes(node.method)) };
+            node.args=[{kind:"Name",name:nm}].concat(node.args);
+            delete node.obj; delete node.method;
+          }
+          return node;
+        }
+
+        case "FunctionDecl": {
+          // `function a.b:c() ... end` has no bracket form, so when hiding members
+          // rewrite to assignment `a.b.c = function(self, ...) ... end` first
+          if (hideMembers && node.target.kind==="Field"){
+            const target=tx(node.target);
+            const fn=tx(node.body);
+            for (const k in node) delete node[k];
+            node.kind="Assign"; node.targets=[target]; node.exprs=[fn];
+            return node;
+          }
+          node.target=tx(node.target);
+          node.body=tx(node.body);
+          return node;
+        }
+
+        case "Table": {
+          for (const f of node.fields){
+            if (f.type==="rec"){ f.key=tx(f.key); f.value=tx(f.value); }
+            else if (f.type==="name"){ f.value=tx(f.value);
+              if (hideMembers){ f.type="rec"; f.key=pool(strToBytes(f.name)); delete f.name; } }
+            else f.value=tx(f.value);
+          }
+          return node;
+        }
+
+        default: {
+          for (const key in node){
+            if (key==="str") continue;
+            const c=node[key];
+            if (c && typeof c==="object"){
+              if (Array.isArray(c)){ for (let i=0;i<c.length;i++) c[i]=tx(c[i]); }
+              else node[key]=tx(c);
+            }
+          }
+          return node;
+        }
+      }
+    }
+    for (let i=0;i<ast.stats.length;i++) ast.stats[i]=tx(ast.stats[i]);
+
     const n=values.length;
     if (n===0) return { ast, prelude:null };
     const perm=[]; for (let i=1;i<=n;i++) perm.push(i); ctx.rng.shuffle(perm);
@@ -900,10 +982,10 @@
 
   // ---------------------------------------------------------------- Pipeline
   const PROFILES = {
-    none:     { rename:false, strings:false, numbers:false, flatten:false },
-    light:    { rename:true,  strings:false, numbers:false, flatten:false },
-    balanced: { rename:true,  strings:true,  numbers:true,  flatten:false },
-    max:      { rename:true,  strings:true,  numbers:true,  flatten:true  },
+    none:     { rename:false, strings:false, numbers:false, flatten:false, members:false },
+    light:    { rename:true,  strings:false, numbers:false, flatten:false, members:false },
+    balanced: { rename:true,  strings:true,  numbers:true,  flatten:false, members:false },
+    max:      { rename:true,  strings:true,  numbers:true,  flatten:true,  members:true  },
   };
   function obfuscate(source, opts){
     opts=opts||{};
@@ -913,7 +995,7 @@
     const seed=(opts.seed!==undefined&&opts.seed!==null)?opts.seed:(Math.floor(Math.random()*4294967296));
     const rng=new Rng(seed>>>0);
     const ast=new Parser(source).parse();
-    const ctx={ rng, seed:seed>>>0, opts, poolName:"_DLU_pool" };
+    const ctx={ rng, seed:seed>>>0, opts, poolName:"_DLU_pool", members:profile.members };
     let prelude=null;
     if (profile.strings){ const r=stringsRun(ast, ctx); prelude=r.prelude; }
     if (profile.numbers) numbersRun(ast, ctx);

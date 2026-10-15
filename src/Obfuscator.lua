@@ -23,10 +23,10 @@ local Flatten = require("./passes/Flatten")
 local Obfuscator = {}
 
 local PROFILES = {
-	none = { rename = false, strings = false, numbers = false, flatten = false },
-	light = { rename = true, strings = false, numbers = false, flatten = false },
-	balanced = { rename = true, strings = true, numbers = true, flatten = false },
-	max = { rename = true, strings = true, numbers = true, flatten = true },
+	none = { rename = false, strings = false, numbers = false, flatten = false, members = false },
+	light = { rename = true, strings = false, numbers = false, flatten = false, members = false },
+	balanced = { rename = true, strings = true, numbers = true, flatten = false, members = false },
+	max = { rename = true, strings = true, numbers = true, flatten = true, members = true },
 }
 
 function Obfuscator.obfuscate(source, opts)
@@ -45,6 +45,7 @@ function Obfuscator.obfuscate(source, opts)
 		seed = seed,
 		opts = opts,
 		poolName = "_DLU_pool",
+		members = profile.members,
 	}
 
 	-- string encryption (produces a prelude that declares the pool local)

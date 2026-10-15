@@ -59,10 +59,24 @@ Pick based on where the code runs.
 |---|---|---|---|
 | `none` | minify | none (loads faster) | baseline / debugging |
 | `light` | + rename locals | **none** | anything, incl. hot loops |
-| `balanced` *(default)* | + string encryption + number obfuscation | **near-zero** | game clients, modules, render-loop code |
-| `max` | + control-flow flattening | some (dispatch loop per function) | cold / non-hot modules where resistance matters most |
+| `balanced` *(default)* | + string encryption (incl. interpolation text) + number obfuscation | **near-zero** | game clients, modules, render-loop code |
+| `max` | + control-flow flattening + member-name hiding | some (dispatch loop; member access loses inline caching) | cold / non-hot modules where resistance matters most |
 
 > Rule of thumb: **`balanced` for code on the hot path, `max` for the rest.**
+
+### What stays readable
+
+Source-to-source obfuscation (no VM) cannot hide everything:
+
+- **Global and standard-library names** (`print`, `game`, `Vector3`, `math`, `pairs`)
+  remain in every profile — hiding them needs `getfenv`/`_ENV` tricks that
+  deoptimize the whole script, defeating the performance goal.
+- **Member names** (`.x`, `:method`, table keys) are visible on `balanced` because
+  turning `a.b` into `a[pool[i]]` loses Luau's field inline-cache (a real per-access
+  cost). `max` hides them by accepting that cost. (Method calls on a non-variable
+  receiver, e.g. `f():m()`, keep `m` visible, to avoid evaluating the receiver twice.)
+- **Original local names, comments and type annotations** are deleted outright on
+  every profile — unrecoverable, but not the same as hidden.
 
 ---
 

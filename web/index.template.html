@@ -218,7 +218,7 @@ footer{padding-block:32px 44px;margin-top:36px;border-top:1px solid var(--border
     <p class="lead">The only technique that is genuinely hard to reverse — a bytecode VM — also runs 10–100× slower. DeepLuaU avoids it and hides your code in forms the Luau compiler erases or that run only once.</p>
     <div class="points">
       <div class="point"><h4>Numbers fold away</h4><p>Integers become arithmetic like <code>((0xD-9)+(0xB-5))</code>. Luau constant-folds it to the same bytecode as the literal <code>10</code>.</p></div>
-      <div class="point"><h4>Strings decrypt once</h4><p>All strings go into one encrypted pool, decrypted a single time at load. Each use is then one table lookup — nothing per frame.</p></div>
+      <div class="point"><h4>Strings decrypt once</h4><p>Every string — including the text inside <code>`{...}`</code> interpolation — goes into one encrypted pool, decrypted a single time at load. Each use is then one table lookup.</p></div>
       <div class="point"><h4>Names are lexical</h4><p>Locals are renamed to lookalike identifiers. It changes only debug names; the compiled bytecode is otherwise identical.</p></div>
     </div>
   </section>
@@ -231,8 +231,8 @@ footer{padding-block:32px 44px;margin-top:36px;border-top:1px solid var(--border
         <tbody>
           <tr><td><code>none</code></td><td>minify</td><td class="eff n">none</td><td>baseline / debugging</td></tr>
           <tr><td><code>light</code></td><td>rename locals</td><td class="eff n">none</td><td>anything, incl. hot loops</td></tr>
-          <tr><td><code>balanced</code></td><td>strings + numbers</td><td class="eff n">near-zero</td><td>default — render-loop code</td></tr>
-          <tr><td><code>max</code></td><td>control-flow flattening</td><td class="eff s">small per-call</td><td>cold / non-hot modules</td></tr>
+          <tr><td><code>balanced</code></td><td>strings (incl. interpolation) + numbers</td><td class="eff n">near-zero</td><td>default — render-loop code</td></tr>
+          <tr><td><code>max</code></td><td>+ flattening + member-name hiding</td><td class="eff s">small per-call</td><td>cold code; most unreadable</td></tr>
         </tbody>
       </table>
     </div>
@@ -254,7 +254,7 @@ footer{padding-block:32px 44px;margin-top:36px;border-top:1px solid var(--border
         </tbody>
       </table>
     </div>
-    <p class="callout"><b>Gone for everyone:</b> original names, comments and type annotations are deleted, not hidden. <b>Still true:</b> never ship secrets or server-trusted logic in client code — keep authority on the server.</p>
+    <p class="callout"><b>Always visible:</b> global and standard-library names like <code>print</code>, <code>game</code>, <code>Vector3</code>, <code>math</code> stay readable — hiding them needs a bytecode VM, which this avoids for speed. On <code>balanced</code>, member names (<code>.x</code>, <code>:method</code>) also remain; <code>max</code> hides those too. <b>Gone for everyone:</b> original local names, comments and type annotations are deleted, not hidden. <b>Still true:</b> never ship secrets or server-trusted logic in client code — keep authority on the server.</p>
   </section>
 
   <footer>
